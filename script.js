@@ -3493,4 +3493,1026 @@ initializeLoginPanels();
 initSelfEnrollment();
 showLoginPage();
 customConsoleLog("System Ready - All Features Implemented", 'success');
-customConsoleLog("Developer Mode: Click ⚡ (Code: 712189) | Admin: admin@school.edu / admin123", 'info');
+customConsoleLog("Developer Mode: Click ⚡ (Code: 712189) | Admin: admin@school.edu / admin123", 'info');/* ============================================================================
+   Algorithmic Agenda Apparatus — patches.js
+   Novulution Tech
+   ----------------------------------------------------------------------------
+   Adds four features on top of the original script.js without modifying it:
+     1. Sched. Gen.: multi-day subjects edit as a CONJOINED unit
+     2. Self-Enrollment: real-time clash detection between ticked subjects
+     3. Self-Enrollment: live unit total + confirm modal that defers
+        un-ticked subjects to the next term period
+     4. Updates page: admin chooses audience (All / Section / Specific
+        Student); enrollment auto-assigns a section; section is visible
+        in the Developer Mode student table
+   ========================================================================== */
+
+(function () {
+    'use strict';
+
+    // patches.js loads AFTER script.js, so all globals are already defined.
+    // We still wait one tick so the script.js init listeners (already
+    // attached) finish wiring before we re-clone any buttons.
+    function whenReady(fn) {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', fn);
+        } else {
+            setTimeout(fn, 0);
+        }
+    }
+
+    /* ====================================================================
+       SHARED HELPERS (multi-slot aware)
+       ==================================================================== */
+    var DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    var TIMES = [
+        '8:00 AM - 10:00 AM',
+        '10:00 AM - 12:00 PM',
+        '1:00 PM - 3:00 PM',
+        '3:00 PM - 5:00 PM'
+    ];
+
+    function dayIdx(d) { var i = DAYS.indexOf(d); return i < 0 ? 0 : i; }
+    function timeIdx(t) { var i = TIMES.indexOf(t); return i < 0 ? 0 : i; }
+    function clampDay(i)  { return Math.max(0, Math.min(DAYS.length - 1, i)); }
+    function clampTime(i) { return Math.max(0, Math.min(TIMES.length - 1, i)); }
+
+    // Parse a subject's full schedule string ("Mon 8-10; Wed 8-10") into
+    // an array of {day, time} slots. Defaults to one slot if unparsable.
+    function parseAllSlots(scheduleString) {
+        if (!scheduleString) return [{ day: DAYS[0], time: TIMES[0] }];
+        var parts = String(scheduleString).split(';').map(function (p) { return p.trim(); }).filter(Boolean);
+        var slots = [];
+        parts.forEach(function (part) {
+            for (var i = 0; i < DAYS.length; i++) {
+                var d = DAYS[i];
+                if (part.indexOf(d) === 0) {
+                    var rest = part.substring(d.length).trim();
+                    var t = TIMES.indexOf(rest) >= 0 ? rest : TIMES[0];
+                    slots.push({ day: d, time: t });
+                    return;
+                }
+            }
+        });
+        return slots.length ? slots : [{ day: DAYS[0], time: TIMES[0] }];
+    }
+
+    function buildScheduleStringMulti(slots) {
+        return slots.map(function (s) { return s.day + ' ' + s.time; }).join('; ');
+    }
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function safeNotify(msg, kind) {
+        if (typeof window.showCustomNotification === 'function') {
+            try { window.showCustomNotification(msg, kind || 'info'); return; } catch (e) {}
+        }
+        try { console.log('[notify ' + (kind || 'info') + ']', msg); } catch (e) {}
+    }
+
+    function getCurrentUser() {
+        return currentUser;
+    }
+
+    function getUsersDB() {
+        return usersDB;
+    }
+
+    function persistAll() {
+        if (typeof window.saveData === 'function') { try { window.saveData(); } catch (e) {} }
+    }
+
+    /* ====================================================================
+       FEATURE 4 (part A): SECTIONS
+       ==================================================================== */
+    var SECTION_CAPACITY = 30;
+
+    function shortLevelTag(student) {
+        if (!student) return 'GEN';
+        if (student.level === 'juniorHigh') {
+            return 'JH-' + (student.sublevel || 'Gx').replace(/\s+/g, '');
+        }
+        if (student.level === 'seniorHigh') {
+            var strand = (student.strand || 'GEN').replace(/\s+/g, '');
+            var grade = (student.sublevel || 'Gx').replace(/\s+/g, '');
+            return strand + '-' + grade;
+        }
+        if (student.level === 'college') {
+            // Compress program name to initials, e.g.
+            // "Bachelor of Science in Computer Science" -> "BSCS"
+            var p = student.program || 'PROG';
+            var compact = p
+                .replace(/Bachelor of Science in /i, 'BS ')
+                .replace(/Bachelor of Arts in /i, 'AB ')
+                .replace(/Bachelor of /i, 'B ');
+            var letters = compact.split(/\s+/).map(function (w) {
+                return w && w[0] ? w[0].toUpperCase() : '';
+            }).join('');
+            if (!letters) letters = 'PROG';
+            var year = (student.yearLevel || 'Yx').replace(/\s+/g, '').replace(/Year/i, 'Y');
+            return letters + '-' + year;
+        }
+        return 'GEN';
+    }
+
+    function ensureSectionsStore() {
+        var db = getUsersDB();
+        if (!db) return null;
+        if (!db.sectionAssignments || typeof db.sectionAssignments !== 'object') {
+            db.sectionAssignments = {};
+        }
+        return db.sectionAssignments;
+    }
+
+    // Return the section ID this student should belong to. Reuses an
+    // existing section with capacity, or opens the next letter (A, B, C…).
+    function assignSectionToStudent(student) {
+        if (!student) return null;
+        var sections = ensureSectionsStore();
+        if (sections === null) return null;
+        if (student.section && sections[student.section]) {
+            // Already assigned and the section still exists.
+            if (sections[student.section].indexOf(student.id) === -1) {
+                sections[student.section].push(student.id);
+            }
+            return student.section;
+        }
+        var prefix = shortLevelTag(student);
+        // Find first existing section with this prefix that has capacity
+        var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+        for (var i = 0; i < letters.length; i++) {
+            var id = prefix + '-' + letters[i];
+            if (!sections[id]) sections[id] = [];
+            if (sections[id].indexOf(student.id) === -1 &&
+                sections[id].length >= SECTION_CAPACITY) continue;
+            if (sections[id].indexOf(student.id) === -1) {
+                sections[id].push(student.id);
+            }
+            student.section = id;
+            return id;
+        }
+        // Fallback (more than 26 sections of one prefix — vanishingly unlikely)
+        var fallback = prefix + '-AA';
+        sections[fallback] = sections[fallback] || [];
+        sections[fallback].push(student.id);
+        student.section = fallback;
+        return fallback;
+    }
+
+    // Migrate any existing students who don't have a section yet.
+    function backfillSections() {
+        var db = getUsersDB();
+        if (!db || !Array.isArray(db.students)) return;
+        var changed = false;
+        db.students.forEach(function (s) {
+            // Only assign sections to students who actually completed
+            // self-enrollment (have a level + at least one enrolled subject)
+            if (s && s.level && Array.isArray(s.enrolledSubjects) && s.enrolledSubjects.length > 0 && !s.section) {
+                assignSectionToStudent(s);
+                changed = true;
+            }
+        });
+        if (changed) persistAll();
+    }
+
+    function getAllKnownSections() {
+        var sections = ensureSectionsStore() || {};
+        return Object.keys(sections).sort();
+    }
+
+    /* ====================================================================
+       FEATURE 2 + 3: enrollment summary (units + clash) and confirm modal
+       ==================================================================== */
+
+    function gatherTickedSubjects() {
+        var pending = pendingEnrollment;
+        if (!pending || !Array.isArray(pending.subjects)) return [];
+        var picked = [];
+        var cards = document.querySelectorAll('#availableSubjectsList .subject-card');
+        cards.forEach(function (card) {
+            var cb = card.querySelector('.subject-checkbox');
+            if (!cb || !cb.checked) return;
+            var idx = parseInt(card.getAttribute('data-subject-index'), 10);
+            if (!isNaN(idx) && pending.subjects[idx]) picked.push(pending.subjects[idx]);
+        });
+        return picked;
+    }
+
+    function gatherUntickedSubjects() {
+        var pending = pendingEnrollment;
+        if (!pending || !Array.isArray(pending.subjects)) return [];
+        var unticked = [];
+        var cards = document.querySelectorAll('#availableSubjectsList .subject-card');
+        cards.forEach(function (card) {
+            var cb = card.querySelector('.subject-checkbox');
+            if (cb && cb.checked) return;
+            var idx = parseInt(card.getAttribute('data-subject-index'), 10);
+            if (!isNaN(idx) && pending.subjects[idx]) unticked.push(pending.subjects[idx]);
+        });
+        return unticked;
+    }
+
+    // Returns array of clash descriptions:
+    //   [{ day, time, names: ['Subj A', 'Subj B'] }, ...]
+    function detectClashes(subjects) {
+        var grid = {};
+        subjects.forEach(function (s) {
+            var slots = parseAllSlots(s.schedule);
+            slots.forEach(function (slot) {
+                var key = slot.day + '|' + slot.time;
+                if (!grid[key]) grid[key] = [];
+                grid[key].push(s.name);
+            });
+        });
+        var out = [];
+        Object.keys(grid).forEach(function (k) {
+            if (grid[k].length > 1) {
+                var parts = k.split('|');
+                out.push({ day: parts[0], time: parts[1], names: grid[k].slice() });
+            }
+        });
+        return out;
+    }
+
+    function updateEnrollmentSummary() {
+        var bar = document.getElementById('enrollmentSummaryBar');
+        if (!bar) return;
+        var ticked = gatherTickedSubjects();
+        var anyCardsExist = document.querySelectorAll('#availableSubjectsList .subject-card').length > 0;
+        bar.style.display = anyCardsExist ? 'flex' : 'none';
+
+        var countEl = document.getElementById('summarySelectedCount');
+        var unitsEl = document.getElementById('summaryTotalUnits');
+        var clashBox = document.getElementById('summaryClashBox');
+        var clashText = document.getElementById('summaryClashText');
+
+        if (countEl) countEl.textContent = ticked.length;
+        var totalUnits = ticked.reduce(function (sum, s) {
+            var u = parseInt(s.units, 10);
+            return sum + (isNaN(u) ? 0 : u);
+        }, 0);
+        if (unitsEl) unitsEl.textContent = totalUnits;
+
+        var clashes = detectClashes(ticked);
+        if (clashBox && clashText) {
+            if (clashes.length === 0) {
+                clashBox.style.display = 'none';
+                clashBox.classList.remove('clash-active');
+            } else {
+                clashBox.style.display = 'flex';
+                clashBox.classList.add('clash-active');
+                var first = clashes[0];
+                var more = clashes.length > 1 ? ' (and ' + (clashes.length - 1) + ' more)' : '';
+                clashText.innerHTML =
+                    '<strong>SCHEDULE CLASH:</strong> ' +
+                    escHtml(first.names.join(' ↔ ')) +
+                    ' overlap on <strong>' + escHtml(first.day) + ' ' + escHtml(first.time) + '</strong>' +
+                    escHtml(more) + '. Untick one to resolve.';
+            }
+        }
+
+        // Decorate the cards themselves so the user can spot the clashing pair
+        var clashKeys = {};
+        clashes.forEach(function (c) {
+            c.names.forEach(function (n) { clashKeys[n] = true; });
+        });
+        document.querySelectorAll('#availableSubjectsList .subject-card').forEach(function (card) {
+            var cb = card.querySelector('.subject-checkbox');
+            if (!cb) return;
+            var name = cb.value;
+            if (cb.checked && clashKeys[name]) card.classList.add('clash-flag');
+            else card.classList.remove('clash-flag');
+        });
+    }
+
+    // Use event delegation so this works even after script.js re-renders
+    // the available-subjects list. Attaching once on document means we
+    // never lose the binding.
+    document.addEventListener('change', function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains('subject-checkbox')) {
+            updateEnrollmentSummary();
+        }
+    }, true);
+    document.addEventListener('click', function (e) {
+        if (!e.target) return;
+        var card = e.target.closest && e.target.closest('#availableSubjectsList .subject-card');
+        if (card) setTimeout(updateEnrollmentSummary, 0);
+    }, true);
+
+    // The list itself gets repopulated by displayAvailableSubjects().
+    // Watch for that and refresh the summary bar.
+    whenReady(function () {
+        var list = document.getElementById('availableSubjectsList');
+        if (list) {
+            var mo = new MutationObserver(function () {
+                updateEnrollmentSummary();
+                applyDeferredHints();
+            });
+            mo.observe(list, { childList: true, subtree: false });
+        }
+    });
+
+    /* ====================================================================
+       FEATURE 3: confirm-with-deferral modal
+       ==================================================================== */
+
+    var TERM_PERIODS = {
+        'Semester':     ['1st Semester', '2nd Semester'],
+        'Tri-Semester': ['1st Tri-Semester', '2nd Tri-Semester', '3rd Tri-Semester'],
+        'Quarter':      ['1st Quarter', '2nd Quarter', '3rd Quarter', '4th Quarter'],
+        'Block Plan':   ['Block A', 'Block B']
+    };
+
+    function getNextTermPeriod(termType, currentPeriod) {
+        var list = TERM_PERIODS[termType] || TERM_PERIODS['Semester'];
+        var i = list.indexOf(currentPeriod);
+        if (i === -1 || i === list.length - 1) return null; // last period — nowhere to defer to
+        return list[i + 1];
+    }
+
+    function openConfirmEnrollmentModal() {
+        var ticked = gatherTickedSubjects();
+        var unticked = gatherUntickedSubjects();
+        var modal = document.getElementById('confirmEnrollmentModal');
+        var body = document.getElementById('confirmEnrollmentBody');
+        if (!modal || !body) {
+            // Modal markup missing — fall back to direct confirm.
+            invokeOriginalConfirm();
+            return;
+        }
+        if (ticked.length === 0) {
+            safeNotify('Please select at least one subject to enroll.', 'warning');
+            return;
+        }
+        var totalUnits = ticked.reduce(function (sum, s) {
+            var u = parseInt(s.units, 10); return sum + (isNaN(u) ? 0 : u);
+        }, 0);
+        var clashes = detectClashes(ticked);
+        var termType = (document.getElementById('academicTermSelect') || {}).value || 'Semester';
+        var termPeriod = (document.getElementById('termPeriodSelect') || {}).value || '1st Semester';
+        var nextPeriod = getNextTermPeriod(termType, termPeriod);
+
+        var clashHtml = '';
+        if (clashes.length > 0) {
+            clashHtml = '<div class="confirm-modal-clash"><i class="fas fa-triangle-exclamation"></i> ' +
+                '<strong>' + clashes.length + ' schedule clash(es) detected.</strong> ' +
+                'You may still enroll, but you will have overlapping classes.<ul>';
+            clashes.forEach(function (c) {
+                clashHtml += '<li>' + escHtml(c.names.join(' ↔ ')) +
+                             ' on ' + escHtml(c.day) + ' ' + escHtml(c.time) + '</li>';
+            });
+            clashHtml += '</ul></div>';
+        }
+
+        var enrollList = ticked.map(function (s) {
+            var u = parseInt(s.units, 10) || 0;
+            return '<li><strong>' + escHtml(s.name) + '</strong> ' +
+                   '<small>(' + u + ' units · ' + escHtml(s.schedule || 'TBD') + ')</small></li>';
+        }).join('');
+
+        var deferHtml;
+        if (unticked.length === 0) {
+            deferHtml = '<p class="confirm-modal-defer-none"><i class="fas fa-check"></i> ' +
+                        'You\'ve selected every subject for this period — nothing will be deferred.</p>';
+        } else if (!nextPeriod) {
+            deferHtml = '<div class="confirm-modal-defer"><i class="fas fa-circle-exclamation"></i> ' +
+                '<strong>' + unticked.length + ' subject(s)</strong> will NOT be enrolled. ' +
+                'This is the last period of <em>' + escHtml(termType) + '</em>, so they cannot be auto-deferred. ' +
+                'You will need to enroll them manually next academic year.<ul>' +
+                unticked.map(function (s) { return '<li>' + escHtml(s.name) + '</li>'; }).join('') +
+                '</ul></div>';
+        } else {
+            deferHtml = '<div class="confirm-modal-defer"><i class="fas fa-forward"></i> ' +
+                '<strong>' + unticked.length + ' un-ticked subject(s)</strong> will be automatically deferred to ' +
+                '<strong>' + escHtml(nextPeriod) + '</strong> and shown at the top when you load that period.<ul>' +
+                unticked.map(function (s) { return '<li>' + escHtml(s.name) + '</li>'; }).join('') +
+                '</ul></div>';
+        }
+
+        body.innerHTML =
+            '<div class="confirm-modal-summary">' +
+                '<div class="confirm-stat"><span class="num">' + ticked.length + '</span><small>Subjects</small></div>' +
+                '<div class="confirm-stat"><span class="num">' + totalUnits + '</span><small>Total Units</small></div>' +
+                '<div class="confirm-stat"><span class="num">' + clashes.length + '</span><small>Clash(es)</small></div>' +
+                '<div class="confirm-stat"><span class="num">' + unticked.length + '</span><small>To Defer</small></div>' +
+            '</div>' +
+            clashHtml +
+            '<h4 style="margin:16px 0 6px;">Subjects you will enroll in:</h4>' +
+            '<ul class="confirm-modal-enroll-list">' + enrollList + '</ul>' +
+            deferHtml +
+            '<div class="confirm-modal-actions">' +
+                '<button type="button" class="modify-btn" id="confirmEnrollmentCancelBtn">Back</button>' +
+                '<button type="button" class="confirm-btn" id="confirmEnrollmentProceedBtn">' +
+                    '<i class="fas fa-check"></i> Confirm Enrollment</button>' +
+            '</div>';
+
+        modal.style.display = 'flex';
+
+        var cancel = document.getElementById('confirmEnrollmentCancelBtn');
+        var proceed = document.getElementById('confirmEnrollmentProceedBtn');
+        if (cancel) cancel.onclick = closeConfirmEnrollmentModal;
+        if (proceed) proceed.onclick = function () {
+            // Capture the deferral list BEFORE the original confirm fires
+            // (because the original repaints / navigates away).
+            var deferList = unticked.slice();
+            invokeOriginalConfirm();
+            stashDeferredSubjects(termType, termPeriod, deferList);
+            assignSectionAfterConfirm();
+            closeConfirmEnrollmentModal();
+        };
+    }
+
+    function closeConfirmEnrollmentModal() {
+        var modal = document.getElementById('confirmEnrollmentModal');
+        if (modal) modal.style.display = 'none';
+    }
+    window.closeConfirmEnrollmentModal = closeConfirmEnrollmentModal;
+
+    function stashDeferredSubjects(termType, currentPeriod, unticked) {
+        if (!unticked || unticked.length === 0) return;
+        var u = getCurrentUser();
+        if (!u || u.type !== 'student' || !u.data) return;
+        var nextPeriod = getNextTermPeriod(termType, currentPeriod);
+        if (!nextPeriod) return; // nowhere to defer to
+        if (!u.data.deferredSubjects || typeof u.data.deferredSubjects !== 'object') {
+            u.data.deferredSubjects = {};
+        }
+        // Clone so future mutations don't leak
+        var clones = JSON.parse(JSON.stringify(unticked));
+        // Mark each so we can show a hint when they reappear later
+        clones.forEach(function (s) { s.__deferredFrom = currentPeriod; });
+        u.data.deferredSubjects[nextPeriod] = (u.data.deferredSubjects[nextPeriod] || []).concat(clones);
+
+        // Mirror to usersDB store
+        var db = getUsersDB();
+        if (db && Array.isArray(db.students)) {
+            var idx = db.students.findIndex(function (s) { return s.id === u.data.id; });
+            if (idx !== -1) db.students[idx] = JSON.parse(JSON.stringify(u.data));
+        }
+        persistAll();
+        safeNotify(unticked.length + ' subject(s) deferred to ' + nextPeriod + '.', 'info');
+    }
+
+    function assignSectionAfterConfirm() {
+        var u = getCurrentUser();
+        if (!u || u.type !== 'student' || !u.data) return;
+        // Only assign once a real enrollment exists
+        if (!Array.isArray(u.data.enrolledSubjects) || u.data.enrolledSubjects.length === 0) return;
+        // Reset section if the level/program changed since last time
+        if (u.data.section) {
+            var sections = ensureSectionsStore() || {};
+            var arr = sections[u.data.section] || [];
+            var expectedPrefix = shortLevelTag(u.data);
+            if (u.data.section.indexOf(expectedPrefix + '-') !== 0) {
+                // Remove from old section, then re-assign
+                sections[u.data.section] = arr.filter(function (id) { return id !== u.data.id; });
+                u.data.section = null;
+            }
+        }
+        var sec = assignSectionToStudent(u.data);
+        // Mirror to usersDB
+        var db = getUsersDB();
+        if (db && Array.isArray(db.students)) {
+            var idx = db.students.findIndex(function (s) { return s.id === u.data.id; });
+            if (idx !== -1) db.students[idx] = JSON.parse(JSON.stringify(u.data));
+        }
+        persistAll();
+        if (sec) safeNotify('Assigned to section ' + sec + '.', 'success');
+    }
+
+    // Annotate the available-subjects list when deferred subjects show up
+    function applyDeferredHints() {
+        var u = getCurrentUser();
+        if (!u || u.type !== 'student' || !u.data) return;
+        var pending = pendingEnrollment;
+        if (!pending) return;
+        var period = (document.getElementById('termPeriodSelect') || {}).value;
+        if (!period) return;
+        var deferred = (u.data.deferredSubjects || {})[period] || [];
+        if (deferred.length === 0) return;
+        var deferredNames = {};
+        deferred.forEach(function (s) { deferredNames[s.name] = s.__deferredFrom || true; });
+        document.querySelectorAll('#availableSubjectsList .subject-card').forEach(function (card) {
+            var cb = card.querySelector('.subject-checkbox');
+            if (!cb) return;
+            if (deferredNames[cb.value] && !card.querySelector('.deferred-tag')) {
+                var tag = document.createElement('span');
+                tag.className = 'deferred-tag';
+                tag.innerHTML = '<i class="fas fa-clock-rotate-left"></i> Deferred from ' +
+                    escHtml(deferredNames[cb.value] === true ? 'previous period' : deferredNames[cb.value]);
+                card.appendChild(tag);
+            }
+        });
+    }
+
+    // Capture the original confirmSchedule chain (script.js wraps it once
+    // already to snapshot defaultSchedule). We invoke that wrapped version.
+    var originalConfirmSchedule = null;
+    function captureOriginalConfirm() {
+        if (originalConfirmSchedule) return;
+        originalConfirmSchedule = window.confirmSchedule;
+    }
+    function invokeOriginalConfirm() {
+        if (typeof originalConfirmSchedule === 'function') {
+            originalConfirmSchedule();
+        } else if (typeof window.confirmSchedule === 'function') {
+            window.confirmSchedule();
+        }
+    }
+
+    // Re-clone the confirm button so its click handler is OURS and ours
+    // alone — script.js's previous listener is dropped along with the
+    // old node.
+    whenReady(function () {
+        captureOriginalConfirm();
+        var btn = document.getElementById('confirmScheduleBtn');
+        if (btn) {
+            var fresh = btn.cloneNode(true);
+            btn.parentNode.replaceChild(fresh, btn);
+            fresh.addEventListener('click', openConfirmEnrollmentModal);
+        }
+        // Click-outside-to-close on the modal overlay
+        var modal = document.getElementById('confirmEnrollmentModal');
+        if (modal) {
+            modal.addEventListener('click', function (e) {
+                if (e.target === modal) closeConfirmEnrollmentModal();
+            });
+        }
+        // Initial summary state
+        updateEnrollmentSummary();
+        // Section migration for any existing students
+        backfillSections();
+    });
+
+    /* ====================================================================
+       FEATURE 1: conjoined multi-day schedule editor
+       ==================================================================== */
+
+    // Apply red clash highlighting to subject-editor rows whose schedule
+    // collides with another subject in the same draft. Called after the
+    // editor is (re)rendered, including after each conjoined slot shift.
+    function applyEditorClashHighlights(draft, container) {
+        if (!container || !Array.isArray(draft)) return;
+        var clashes = detectClashes(draft);
+        var clashingNames = {};
+        clashes.forEach(function (c) {
+            (c.names || []).forEach(function (n) { clashingNames[n] = true; });
+        });
+        container.querySelectorAll('.subject-editor-row').forEach(function (row) {
+            var idx = parseInt(row.getAttribute('data-row-idx'), 10);
+            var name = (!isNaN(idx) && draft[idx]) ? draft[idx].name : null;
+            var tag = row.querySelector('.clash-row-tag');
+            if (name && clashingNames[name]) {
+                row.classList.add('clash');
+                if (tag) tag.style.display = 'inline-flex';
+            } else {
+                row.classList.remove('clash');
+                if (tag) tag.style.display = 'none';
+            }
+        });
+    }
+
+    function renderSubjectScheduleEditorPatched() {
+        var container = document.getElementById('subjectEditorList');
+        var wrapper = document.getElementById('subjectScheduleEditor');
+        var slotIndicator = document.getElementById('scheduleSlotIndicator');
+        if (!container || !wrapper) return;
+        var u = getCurrentUser();
+        if (!u || u.type !== 'student') {
+            wrapper.style.display = 'none';
+            if (slotIndicator) slotIndicator.style.display = 'none';
+            return;
+        }
+        var draft = scheduleDraft;
+        if (!draft || draft.length === 0) {
+            wrapper.style.display = 'none';
+            if (slotIndicator) slotIndicator.style.display = 'none';
+            return;
+        }
+
+        if (typeof window.ensureSlotFields === 'function') window.ensureSlotFields(u.data);
+        if (slotIndicator) {
+            slotIndicator.style.display = 'flex';
+            var remEl = document.getElementById('slotsRemainingDisplay');
+            var limEl = document.getElementById('slotsLimitDisplay');
+            if (remEl && typeof window.getSlotsRemaining === 'function')
+                remEl.textContent = window.getSlotsRemaining(u.data);
+            if (limEl) limEl.textContent = u.data.scheduleChangeLimit;
+        }
+
+        wrapper.style.display = 'block';
+        var defaultSched = u.data.defaultSchedule || [];
+        var html = '';
+        draft.forEach(function (subj, idx) {
+            var slots = parseAllSlots(subj.schedule);
+            var defaultSubj = defaultSched[idx];
+            var defaultSlots = defaultSubj ? parseAllSlots(defaultSubj.schedule) : slots;
+            var dirty = false;
+            for (var i = 0; i < slots.length; i++) {
+                var ds = defaultSlots[i] || slots[i];
+                if (slots[i].day !== ds.day || slots[i].time !== ds.time) { dirty = true; break; }
+            }
+            var multi = slots.length > 1;
+            var slotRowsHtml = slots.map(function (slot, sIdx) {
+                var dayOpts = DAYS.map(function (d) {
+                    return '<option value="' + d + '"' + (d === slot.day ? ' selected' : '') + '>' + d + '</option>';
+                }).join('');
+                var timeOpts = TIMES.map(function (t) {
+                    return '<option value="' + t + '"' + (t === slot.time ? ' selected' : '') + '>' + t + '</option>';
+                }).join('');
+                var sessionLabel = multi ? '<span class="session-pill">Session ' + (sIdx + 1) + '</span>' : '';
+                return '<div class="subject-editor-slot" data-slot-idx="' + sIdx + '">' +
+                       sessionLabel +
+                       '<select class="subject-editor-day-multi" data-subj-idx="' + idx + '" data-slot-idx="' + sIdx + '">' + dayOpts + '</select>' +
+                       '<select class="subject-editor-time-multi" data-subj-idx="' + idx + '" data-slot-idx="' + sIdx + '">' + timeOpts + '</select>' +
+                       '</div>';
+            }).join('');
+            var conjoinedBadge = multi
+                ? '<span class="conjoined-badge" title="Editing one session moves all sessions of this subject together."><i class="fas fa-link"></i> Conjoined (' + slots.length + ' sessions)</span>'
+                : '';
+            html += '<div class="subject-editor-row' + (dirty ? ' dirty' : '') + '" data-row-idx="' + idx + '">' +
+                       '<div class="subject-editor-name">' + escHtml(subj.name) + ' ' + conjoinedBadge + '<span class="clash-row-tag" style="display:none;"><i class="fas fa-triangle-exclamation"></i> Conflict</span></div>' +
+                       '<div class="subject-editor-slots">' + slotRowsHtml + '</div>' +
+                   '</div>';
+        });
+        container.innerHTML = html;
+
+        // Mark any rows whose subject collides with another subject in the
+        // working draft (same day + time). Reuses detectClashes() so the
+        // editor and the self-enrollment summary use the exact same rule.
+        applyEditorClashHighlights(draft, container);
+
+        // Bind change listeners — change in ANY slot shifts ALL the slots
+        // of that subject by the same day/time delta (conjoined behavior).
+        container.querySelectorAll('.subject-editor-day-multi, .subject-editor-time-multi').forEach(function (sel) {
+            sel.addEventListener('change', function () {
+                var subjIdx = parseInt(this.getAttribute('data-subj-idx'), 10);
+                var slotIdx = parseInt(this.getAttribute('data-slot-idx'), 10);
+                if (isNaN(subjIdx) || !draft[subjIdx]) return;
+
+                var oldSlots = parseAllSlots(draft[subjIdx].schedule);
+                var oldSlot = oldSlots[slotIdx] || oldSlots[0];
+                var row = this.closest('.subject-editor-row');
+                var slotEl = this.closest('.subject-editor-slot');
+                var newDay = slotEl.querySelector('.subject-editor-day-multi').value;
+                var newTime = slotEl.querySelector('.subject-editor-time-multi').value;
+
+                var dayDelta = dayIdx(newDay) - dayIdx(oldSlot.day);
+                var timeDelta = timeIdx(newTime) - timeIdx(oldSlot.time);
+
+                // Apply delta to ALL slots (conjoined). Uses the OLD positions
+                // as the basis so the original gap pattern is preserved.
+                var newSlots = oldSlots.map(function (s) {
+                    return {
+                        day: DAYS[clampDay(dayIdx(s.day) + dayDelta)],
+                        time: TIMES[clampTime(timeIdx(s.time) + timeDelta)]
+                    };
+                });
+                draft[subjIdx].schedule = buildScheduleStringMulti(newSlots);
+
+                // Re-render the canvas + this editor (so the other slot
+                // selects update to reflect the conjoined shift).
+                if (typeof window.renderScheduleTable === 'function') {
+                    window.renderScheduleTable(draft, 'scheduleResult');
+                }
+                renderSubjectScheduleEditorPatched();
+            });
+        });
+    }
+
+    function getDirtySubjectsPatched() {
+        var u = getCurrentUser();
+        var draft = scheduleDraft;
+        if (!u || !u.data || !draft) return [];
+        var def = u.data.defaultSchedule || [];
+        var dirty = [];
+        draft.forEach(function (subj, idx) {
+            var cur = parseAllSlots(subj.schedule);
+            var orig = def[idx] ? parseAllSlots(def[idx].schedule) : cur;
+            var changed = false;
+            var maxLen = Math.max(cur.length, orig.length);
+            for (var i = 0; i < maxLen; i++) {
+                var a = cur[i] || cur[0];
+                var b = orig[i] || orig[0];
+                if (a.day !== b.day || a.time !== b.time) { changed = true; break; }
+            }
+            if (changed) {
+                dirty.push({
+                    name: subj.name,
+                    from: orig.map(function (s) { return s.day + ' ' + s.time; }).join('; '),
+                    to: cur.map(function (s) { return s.day + ' ' + s.time; }).join('; ')
+                });
+            }
+        });
+        return dirty;
+    }
+
+    // Override the script.js versions. These are top-level function
+    // declarations there, so reassigning the window/global property
+    // changes what later callers see.
+    window.renderSubjectScheduleEditor = renderSubjectScheduleEditorPatched;
+    window.getDirtySubjects = getDirtySubjectsPatched;
+
+    // Re-clone the buttons that bound the OLD renderer/submit logic so they
+    // route through the patched versions.
+    whenReady(function () {
+        var submitBtn = document.getElementById('submitScheduleChangeBtn');
+        if (submitBtn) {
+            var fresh = submitBtn.cloneNode(true);
+            submitBtn.parentNode.replaceChild(fresh, submitBtn);
+            fresh.addEventListener('click', function () {
+                if (typeof window.submitScheduleChangeRequest === 'function') {
+                    window.submitScheduleChangeRequest();
+                }
+            });
+        }
+        var resetBtn = document.getElementById('resetScheduleBtn');
+        if (resetBtn) {
+            var freshR = resetBtn.cloneNode(true);
+            resetBtn.parentNode.replaceChild(freshR, resetBtn);
+            freshR.addEventListener('click', function () {
+                if (typeof window.resetScheduleDraftToDefault === 'function') {
+                    window.resetScheduleDraftToDefault();
+                }
+                renderSubjectScheduleEditorPatched();
+            });
+        }
+    });
+
+    /* ====================================================================
+       FEATURE 4 (part B): admin audience block + filtered notifications
+       ==================================================================== */
+
+    function populateAudienceDropdowns() {
+        var sectionSel = document.getElementById('audienceSectionSelect');
+        var studentSel = document.getElementById('audienceStudentSelect');
+        if (sectionSel) {
+            var prevS = sectionSel.value;
+            var sections = getAllKnownSections();
+            sectionSel.innerHTML = '<option value="">— Select section —</option>' +
+                sections.map(function (id) {
+                    var count = ((ensureSectionsStore() || {})[id] || []).length;
+                    return '<option value="' + escHtml(id) + '">' + escHtml(id) + ' (' + count + ' student' + (count === 1 ? '' : 's') + ')</option>';
+                }).join('');
+            if (prevS) sectionSel.value = prevS;
+        }
+        if (studentSel) {
+            var prevSt = studentSel.value;
+            var db = getUsersDB();
+            var enrolled = (db && Array.isArray(db.students))
+                ? db.students.filter(function (s) {
+                    return s.level && Array.isArray(s.enrolledSubjects) && s.enrolledSubjects.length > 0;
+                })
+                : [];
+            studentSel.innerHTML = '<option value="">— Select student —</option>' +
+                enrolled.map(function (s) {
+                    return '<option value="' + escHtml(s.id) + '">' +
+                        escHtml(s.name) + ' (' + escHtml(s.id) + ')' +
+                        (s.section ? ' — ' + escHtml(s.section) : '') +
+                    '</option>';
+                }).join('');
+            if (prevSt) studentSel.value = prevSt;
+        }
+    }
+
+    function refreshAudienceSummary() {
+        var summary = document.getElementById('audienceSummary');
+        if (!summary) return;
+        var type = (document.getElementById('audienceType') || {}).value || 'all';
+        if (type === 'all') {
+            summary.innerHTML = '<i class="fas fa-info-circle"></i> Will be sent to <strong>all enrolled students</strong>.';
+            return;
+        }
+        if (type === 'section') {
+            var sec = (document.getElementById('audienceSectionSelect') || {}).value;
+            if (!sec) {
+                summary.innerHTML = '<i class="fas fa-circle-exclamation"></i> Pick a section above to continue.';
+                return;
+            }
+            var members = ((ensureSectionsStore() || {})[sec] || []).length;
+            summary.innerHTML = '<i class="fas fa-info-circle"></i> Will be sent to section <strong>' + escHtml(sec) + '</strong> (' + members + ' student' + (members === 1 ? '' : 's') + ').';
+            return;
+        }
+        if (type === 'student') {
+            var sid = (document.getElementById('audienceStudentSelect') || {}).value;
+            if (!sid) {
+                summary.innerHTML = '<i class="fas fa-circle-exclamation"></i> Pick a student above to continue.';
+                return;
+            }
+            var db = getUsersDB();
+            var who = (db && db.students || []).find(function (s) { return s.id === sid; });
+            summary.innerHTML = '<i class="fas fa-info-circle"></i> Will be sent only to <strong>' + escHtml(who ? who.name : sid) + '</strong>.';
+        }
+    }
+
+    function getCurrentAudienceSelection() {
+        var type = (document.getElementById('audienceType') || {}).value || 'all';
+        var out = { type: type };
+        if (type === 'section') out.sectionId = (document.getElementById('audienceSectionSelect') || {}).value || null;
+        if (type === 'student') out.studentId = (document.getElementById('audienceStudentSelect') || {}).value || null;
+        return out;
+    }
+
+    function audienceLabel(audience) {
+        if (!audience || audience.type === 'all') return '📢 All Students';
+        if (audience.type === 'section') return '🏷️ Section ' + (audience.sectionId || '?');
+        if (audience.type === 'student') {
+            var db = getUsersDB();
+            var who = (db && db.students || []).find(function (s) { return s.id === audience.studentId; });
+            return '👤 ' + (who ? who.name : audience.studentId || '?');
+        }
+        return '📢 All';
+    }
+
+    function notificationMatchesUser(n, user) {
+        var a = n.audience;
+        if (!a || a.type === 'all') return true;
+        if (!user || user.type !== 'student' || !user.data) return false;
+        if (a.type === 'student') return a.studentId === user.data.id;
+        if (a.type === 'section') return a.sectionId && user.data.section === a.sectionId;
+        return true;
+    }
+
+    // Wrap addNotification to attach the currently-selected audience
+    var originalAddNotification = window.addNotification;
+    window.addNotification = function (type, title, details, reason) {
+        var audience = getCurrentAudienceSelection();
+        // Validate
+        if (audience.type === 'section' && !audience.sectionId) {
+            safeNotify('Please pick a section in the audience block first.', 'warning');
+            return;
+        }
+        if (audience.type === 'student' && !audience.studentId) {
+            safeNotify('Please pick a student in the audience block first.', 'warning');
+            return;
+        }
+        // Call original to push & save
+        if (typeof originalAddNotification === 'function') {
+            originalAddNotification(type, title, details, reason);
+        }
+        // Attach audience to the most recently added notification of that type
+        var notifDB = notificationsDB;
+        if (notifDB && notifDB[type] && notifDB[type][0]) {
+            notifDB[type][0].audience = audience;
+            if (typeof window.saveNotifications === 'function') {
+                try { window.saveNotifications(); } catch (e) {}
+            }
+        }
+        safeNotify('Sent to ' + audienceLabel(audience) + '.', 'info');
+    };
+
+    // Filter the student-side notifications view by audience
+    var originalLoadNotificationsView = window.loadNotificationsView;
+    window.loadNotificationsView = function () {
+        var u = getCurrentUser();
+        if (!u || u.type !== 'student') {
+            if (typeof originalLoadNotificationsView === 'function') originalLoadNotificationsView();
+            return;
+        }
+        var container = document.getElementById('studentNotificationsList');
+        if (!container) return;
+        var notifDB = notificationsDB;
+        if (!notifDB) {
+            if (typeof originalLoadNotificationsView === 'function') originalLoadNotificationsView();
+            return;
+        }
+        var all = [];
+        ['schedule', 'room', 'professor'].forEach(function (kind) {
+            (notifDB[kind] || []).forEach(function (n) { all.push(Object.assign({}, n, { type: kind })); });
+        });
+        all.sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
+        all = all.filter(function (n) { return notificationMatchesUser(n, u); });
+
+        if (all.length === 0) {
+            container.innerHTML = '<div class="empty-state"><i class="fas fa-bell-slash"></i><p>No announcements addressed to you right now.</p></div>';
+            return;
+        }
+        var html = '';
+        all.forEach(function (n) {
+            var icon = n.type === 'schedule' ? 'fa-clock' : (n.type === 'room' ? 'fa-door-open' : 'fa-chalkboard-teacher');
+            var audTag = n.audience && n.audience.type !== 'all'
+                ? '<div class="notification-audience-tag"><i class="fas fa-tag"></i> ' + escHtml(audienceLabel(n.audience)) + '</div>'
+                : '';
+            html += '<div class="notification-item">' +
+                       '<div class="notification-icon ' + n.type + '"><i class="fas ' + icon + '"></i></div>' +
+                       '<div class="notification-content">' +
+                           '<div class="notification-title">' + escHtml(n.title) + '</div>' +
+                           '<div class="notification-details">' + escHtml(n.details || '') + '</div>' +
+                           '<div class="notification-reason">' + escHtml(n.reason || '') + '</div>' +
+                           audTag +
+                           '<div class="notification-date">' + new Date(n.date).toLocaleString() + '</div>' +
+                       '</div>' +
+                   '</div>';
+        });
+        container.innerHTML = html;
+    };
+
+    // Wire the audience block UI
+    whenReady(function () {
+        var typeSel = document.getElementById('audienceType');
+        var secWrap = document.getElementById('audienceSectionWrap');
+        var stuWrap = document.getElementById('audienceStudentWrap');
+        var secSel = document.getElementById('audienceSectionSelect');
+        var stuSel = document.getElementById('audienceStudentSelect');
+
+        function applyVisibility() {
+            var v = (typeSel && typeSel.value) || 'all';
+            if (secWrap) secWrap.style.display = (v === 'section') ? 'block' : 'none';
+            if (stuWrap) stuWrap.style.display = (v === 'student') ? 'block' : 'none';
+            refreshAudienceSummary();
+        }
+        if (typeSel) typeSel.addEventListener('change', applyVisibility);
+        if (secSel) secSel.addEventListener('change', refreshAudienceSummary);
+        if (stuSel) stuSel.addEventListener('change', refreshAudienceSummary);
+
+        // Refresh dropdowns whenever the admin opens the Updates page
+        var navLinks = document.querySelectorAll('[data-action="updates"]');
+        navLinks.forEach(function (a) {
+            a.addEventListener('click', function () {
+                setTimeout(function () { populateAudienceDropdowns(); applyVisibility(); }, 50);
+            });
+        });
+        // Also refresh when admin clicks any of the announcement tabs
+        ['schedule', 'room', 'professor'].forEach(function (k) {
+            document.querySelectorAll('.admin-tab[data-admin-tab="' + k + '"]').forEach(function (t) {
+                t.addEventListener('click', function () {
+                    populateAudienceDropdowns(); applyVisibility();
+                });
+            });
+        });
+
+        // Hide the audience block when admin is on a non-announcement tab
+        // (requests / programs panels don't post announcements)
+        document.querySelectorAll('.admin-tab').forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                var t = this.getAttribute('data-admin-tab');
+                var block = document.getElementById('adminAudienceBlock');
+                if (!block) return;
+                var showFor = (t === 'schedule' || t === 'room' || t === 'professor');
+                block.style.display = showFor ? 'block' : 'none';
+            });
+        });
+
+        populateAudienceDropdowns();
+        applyVisibility();
+    });
+
+    /* ====================================================================
+       FEATURE 4 (part C): Section column in Developer Mode student table
+       ==================================================================== */
+
+    function patchDevTableWithSections() {
+        var container = document.getElementById('devStudentTable');
+        if (!container) return;
+        var table = container.querySelector('table.dev-table');
+        if (!table) return;
+        if (table.getAttribute('data-section-patched') === '1') return;
+        var thead = table.querySelector('thead tr');
+        if (thead && !thead.querySelector('.section-th')) {
+            // Insert "Section" before the last "Actions" column
+            var actionsTh = thead.lastElementChild;
+            var th = document.createElement('th');
+            th.className = 'section-th';
+            th.textContent = 'Section';
+            if (actionsTh) thead.insertBefore(th, actionsTh);
+            else thead.appendChild(th);
+        }
+        var rows = table.querySelectorAll('tbody tr');
+        var db = getUsersDB();
+        var students = (db && db.students) || [];
+        rows.forEach(function (row, i) {
+            if (row.querySelector('.section-td')) return;
+            var s = students[i];
+            var sec = s && s.section ? s.section : '—';
+            var td = document.createElement('td');
+            td.className = 'section-td';
+            td.innerHTML = sec === '—'
+                ? '<span style="color:#999;">—</span>'
+                : '<span class="section-pill">' + escHtml(sec) + '</span>';
+            var actionsTd = row.lastElementChild;
+            if (actionsTd) row.insertBefore(td, actionsTd);
+            else row.appendChild(td);
+        });
+        table.setAttribute('data-section-patched', '1');
+    }
+
+    whenReady(function () {
+        var devContainer = document.getElementById('devStudentTable');
+        if (!devContainer) return;
+        // Run once if the table is already there
+        patchDevTableWithSections();
+        // And re-run whenever the original loadDeveloperStudentTable refreshes it
+        var mo = new MutationObserver(function () {
+            // Reset the flag each time the table itself is rebuilt
+            var t = devContainer.querySelector('table.dev-table');
+            if (t) t.removeAttribute('data-section-patched');
+            patchDevTableWithSections();
+        });
+        mo.observe(devContainer, { childList: true, subtree: true });
+    });
+
+})();

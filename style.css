@@ -2468,3 +2468,417 @@ textarea.dark-input:focus {
     letter-spacing: 0.5em;
     margin: 8px 0;
 }
+/* ============================================================================
+   Algorithmic Agenda Apparatus — patches.css
+   Novulution Tech
+   ----------------------------------------------------------------------------
+   Styles for the four added features (see patches.js header for details).
+   ========================================================================== */
+
+/* =====================================================================
+   FEATURE 2 + 3: enrollment summary bar (units + clash live readout)
+   ===================================================================== */
+.enrollment-summary-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 16px;
+    margin: 12px 0;
+    background: linear-gradient(135deg, #eef5ff 0%, #f8fbff 100%);
+    border: 1px solid #c8dcf6;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    flex-wrap: wrap;
+}
+.enrollment-summary-left {
+    display: flex;
+    gap: 22px;
+    flex-wrap: wrap;
+}
+.enrollment-summary-left .summary-stat {
+    color: #335;
+    font-size: 0.95em;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.enrollment-summary-left .summary-stat strong {
+    font-size: 1.15em;
+    color: #1a4faa;
+    margin-left: 2px;
+}
+
+.summary-clash-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    background: #fff5f5;
+    color: #8a1c1c;
+    border: 1px solid #f1c0c0;
+    font-size: 0.9em;
+    flex: 1 1 320px;
+    min-width: 280px;
+}
+.summary-clash-box.clash-active {
+    background: #ffe9e9;
+    border-color: #e88;
+    color: #7a0d0d;
+    animation: clashPulse 1.6s ease-in-out infinite;
+}
+.summary-clash-box i {
+    font-size: 1.15em;
+    color: #c0392b;
+}
+@keyframes clashPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(192, 57, 43, 0.0); }
+    50%      { box-shadow: 0 0 0 6px rgba(192, 57, 43, 0.18); }
+}
+
+/* Highlight clashing subject cards in the available list — color the
+   whole container red without covering up any of the subject info.
+   Selectors are written with extra specificity so they override the
+   original .subject-card.selected (green + white-text) rules whenever
+   a card is BOTH ticked AND in conflict.                              */
+.subject-card.clash-flag,
+.subject-card.selected.clash-flag {
+    background: #ffe1e1 !important;
+    background-image: none !important;          /* kill .selected gradient */
+    border: 2px solid #e74c3c !important;
+    color: #4a0d0d !important;                  /* kill .selected white   */
+    box-shadow: 0 0 0 1px rgba(231, 76, 60, 0.25), 0 2px 6px rgba(231, 76, 60, 0.2);
+    transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.subject-card.clash-flag .subject-info strong,
+.subject-card.selected.clash-flag .subject-info strong {
+    color: #7a0d0d !important;
+}
+.subject-card.clash-flag .subject-info small,
+.subject-card.selected.clash-flag .subject-info small {
+    color: #5a1818 !important;
+}
+.subject-card.clash-flag .subject-info small i,
+.subject-card.selected.clash-flag .subject-info small i {
+    color: #c0392b !important;
+}
+.subject-card.clash-flag .subject-checkbox,
+.subject-card.selected.clash-flag .subject-checkbox {
+    accent-color: #c0392b;
+}
+
+/* Tag shown on cards that were deferred from a previous period */
+.deferred-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #fff4d8;
+    color: #7a5a00;
+    border: 1px solid #f1d77a;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.72em;
+    font-weight: 600;
+    margin-top: 6px;
+}
+
+/* =====================================================================
+   FEATURE 3: confirm-with-deferral modal body
+   ===================================================================== */
+.confirm-modal-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.confirm-modal-summary .confirm-stat {
+    background: #f3f7ff;
+    border: 1px solid #d6e4f8;
+    border-radius: 8px;
+    padding: 10px 8px;
+    text-align: center;
+}
+.confirm-modal-summary .confirm-stat .num {
+    display: block;
+    font-size: 1.7em;
+    font-weight: 700;
+    color: #1a4faa;
+    line-height: 1.1;
+}
+.confirm-modal-summary .confirm-stat small {
+    color: #555;
+    font-size: 0.78em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.confirm-modal-clash {
+    background: #fff0f0;
+    border: 1px solid #f0b8b8;
+    color: #7a1d1d;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+.confirm-modal-clash i { color: #c0392b; margin-right: 4px; }
+.confirm-modal-clash ul {
+    margin: 6px 0 0 22px;
+    padding: 0;
+}
+
+.confirm-modal-enroll-list {
+    margin: 0 0 14px 22px;
+    padding: 0;
+    max-height: 180px;
+    overflow-y: auto;
+    color: #234;
+}
+.confirm-modal-enroll-list li {
+    margin-bottom: 4px;
+}
+.confirm-modal-enroll-list small {
+    color: #777;
+    margin-left: 4px;
+}
+
+.confirm-modal-defer {
+    background: #fffaf0;
+    border: 1px solid #f5d398;
+    color: #6b4900;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+.confirm-modal-defer i { color: #d18900; margin-right: 4px; }
+.confirm-modal-defer ul { margin: 6px 0 0 22px; padding: 0; }
+
+.confirm-modal-defer-none {
+    background: #f0fff4;
+    border: 1px solid #b5e0c2;
+    color: #1f6b3a;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+.confirm-modal-defer-none i { margin-right: 4px; }
+
+.confirm-modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 12px;
+}
+.confirm-modal-actions .modify-btn,
+.confirm-modal-actions .confirm-btn {
+    min-width: 140px;
+}
+
+/* =====================================================================
+   FEATURE 1: conjoined multi-day editor
+   ===================================================================== */
+/* The original .subject-editor-row uses CSS grid in style.css. We keep
+   that shape for single-session subjects, but multi-session rows use
+   the .subject-editor-slots flex container so the per-session selects
+   stack vertically without breaking the original grid look.            */
+.subject-editor-row {
+    align-items: flex-start;
+}
+.subject-editor-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.conjoined-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: linear-gradient(135deg, #fef5e7 0%, #fff8eb 100%);
+    color: #8a5a00;
+    border: 1px solid #f1d77a;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.72em;
+    font-weight: 600;
+    cursor: help;
+}
+.conjoined-badge i {
+    color: #c46a00;
+}
+.subject-editor-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    grid-column: span 2;
+    width: 100%;
+}
+.subject-editor-slot {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.subject-editor-slot select {
+    flex: 1 1 130px;
+    min-width: 130px;
+    padding: 6px 8px;
+    border: 1px solid #d2d6de;
+    border-radius: 6px;
+    background: #fff;
+    color: #222;
+    font-size: 0.9em;
+}
+.subject-editor-slot select:focus {
+    outline: 2px solid #4a90e2;
+    outline-offset: 1px;
+}
+.session-pill {
+    background: #eef2f9;
+    color: #355;
+    border: 1px solid #d6dcea;
+    font-size: 0.68em;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    flex: 0 0 auto;
+}
+.subject-editor-row.dirty .conjoined-badge {
+    background: #ffe9c4;
+    border-color: #e0a740;
+    color: #6b4900;
+}
+
+/* Schedule Generator: clash highlight for the conjoined editor row.
+   When two or more subjects in the working draft land on the same day +
+   time, we color the row container red so the conflict is unmistakable. */
+.subject-editor-row.clash {
+    background: #ffd9d9 !important;
+    border: 2px solid #e74c3c !important;
+    border-radius: 8px;
+    padding: 8px 10px;
+    box-shadow: 0 0 0 1px rgba(231, 76, 60, 0.2), 0 2px 6px rgba(231, 76, 60, 0.18);
+    animation: editorClashPulse 1.8s ease-in-out infinite;
+}
+.subject-editor-row.clash .subject-editor-name {
+    color: #8a1c1c;
+    font-weight: 700;
+}
+.subject-editor-row.clash .clash-row-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #e74c3c;
+    color: #fff;
+    border: none;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+.subject-editor-row.clash .clash-row-tag i { font-size: 0.85em; }
+@keyframes editorClashPulse {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(231, 76, 60, 0.2), 0 2px 6px rgba(231, 76, 60, 0.18); }
+    50%      { box-shadow: 0 0 0 5px rgba(231, 76, 60, 0.28), 0 2px 10px rgba(231, 76, 60, 0.28); }
+}
+
+/* =====================================================================
+   FEATURE 4: admin audience block
+   ===================================================================== */
+.admin-audience-block {
+    margin: 14px 0 18px;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, #f8f4ff 0%, #fff8fc 100%);
+    border: 1px solid #e0d0f0;
+    border-radius: 10px;
+}
+.admin-audience-block h4 {
+    margin: 0 0 4px;
+    color: #5a2a8a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.admin-audience-block h4 i { color: #7a3aaf; }
+.admin-audience-block .schedule-history-note {
+    margin: 0 0 10px;
+    color: #666;
+    font-size: 0.85em;
+}
+.admin-audience-block .form-row {
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.admin-audience-block .app-form-group {
+    flex: 1 1 220px;
+    min-width: 200px;
+}
+.audience-summary {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: #fff;
+    border-left: 3px solid #7a3aaf;
+    border-radius: 4px;
+    font-size: 0.88em;
+    color: #444;
+}
+.audience-summary i {
+    color: #7a3aaf;
+    margin-right: 4px;
+}
+
+/* Tag inside a notification card showing who the announcement targeted */
+.notification-audience-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    background: #f3ecfa;
+    color: #5a2a8a;
+    border: 1px solid #d8c3ee;
+    padding: 2px 9px;
+    border-radius: 12px;
+    font-size: 0.74em;
+    font-weight: 600;
+    width: fit-content;
+}
+.notification-audience-tag i { font-size: 0.85em; }
+
+/* =====================================================================
+   FEATURE 4: section pill in Developer Mode student table
+   ===================================================================== */
+.section-pill {
+    display: inline-block;
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    color: #fff;
+    padding: 3px 9px;
+    border-radius: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.78em;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+}
+
+/* =====================================================================
+   Responsive tweaks
+   ===================================================================== */
+@media (max-width: 720px) {
+    .enrollment-summary-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .summary-clash-box {
+        flex: 1 1 auto;
+    }
+    .confirm-modal-summary {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .subject-editor-slots {
+        grid-column: span 1;
+    }
+}
