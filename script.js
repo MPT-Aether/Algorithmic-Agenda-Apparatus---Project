@@ -1,293 +1,681 @@
-// Algorithmic Agenda Apparatus System - Complete Enhanced Version
+// ============ DATA STORAGE ==========
 let usersDB = { students: [], admins: [] };
 let currentUser = null;
 let registrationData = {};
 let notificationsDB = { schedule: [], room: [], professor: [] };
+let resetCodes = {};
+let gradeChart = null;
+let attendanceChart = null;
+let pendingEnrollment = null;
+let devStudentChart = null;
+let isDeveloperModeActive = false;
 
-// ============ CUSTOM CONSOLE LOGGER ============
-function logToCustomConsole(message, type = "info", autoShow = false) {
-    const consoleContent = document.getElementById('consoleContent');
+// ============ DISABLE BROWSER CONSOLE ==========
+(function() {
+    const noop = function() {};
+    window.console.log = noop;
+    window.console.warn = noop;
+    window.console.error = noop;
+    window.console.info = noop;
+    window.console.debug = noop;
+})();
+
+// ============ HELPER FUNCTIONS ==========
+function escapeHtml(str) {
+    if (!str) return str;
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}
+
+// ============ CUSTOM NOTIFICATION SYSTEM ==========
+function showCustomNotification(message, type = "info", duration = 4000) {
+    const existingNotif = document.getElementById('customNotification');
+    if (existingNotif) {
+        existingNotif.classList.add('hide');
+        setTimeout(() => {
+            if (existingNotif.parentElement) existingNotif.remove();
+        }, 300);
+    }
+    
+    const notification = document.createElement('div');
+    notification.id = 'customNotification';
+    notification.className = `custom-notification ${type}`;
+    
+    let icon = 'fa-info-circle';
+    if (type === 'success') icon = 'fa-check-circle';
+    if (type === 'error') icon = 'fa-exclamation-circle';
+    if (type === 'warning') icon = 'fa-exclamation-triangle';
+    
+    const now = new Date();
+    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    notification.innerHTML = `
+        <div class="notification-icon"><i class="fas ${icon}"></i></div>
+        <div class="notification-content">
+            <div class="notification-message">${escapeHtml(message)}</div>
+            <div class="notification-time"><i class="fas fa-clock"></i> ${timeString}</div>
+        </div>
+        <button class="notification-close" onclick="this.closest('.custom-notification').classList.add('hide'); setTimeout(() => this.closest('.custom-notification')?.remove(), 300);">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    document.body.appendChild(notification);
+    setTimeout(() => notification.classList.add('show'), 10);
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.classList.add('hide');
+            setTimeout(() => {
+                if (notification.parentElement) notification.remove();
+            }, 300);
+        }
+    }, duration);
+}
+
+// ============ CUSTOM CONSOLE FUNCTIONS ==========
+function customConsoleLog(message, type = "info") {
+    const consoleContent = document.getElementById('customConsoleContent');
     if (!consoleContent) return;
     const timestamp = new Date().toLocaleTimeString();
-    const logEntry = document.createElement("div");
-    logEntry.className = "console-log";
-    
-    let formattedMessage = "";
-    switch(type) {
-        case "user": formattedMessage = `<span class="console-timestamp">[${timestamp}]</span> <span class="console-user">${message}</span>`; break;
-        case "action": formattedMessage = `<span class="console-timestamp">[${timestamp}]</span> <span class="console-action">${message}</span>`; break;
-        case "success": formattedMessage = `<span class="console-timestamp">[${timestamp}]</span> <span class="console-success">${message}</span>`; break;
-        case "error": formattedMessage = `<span class="console-timestamp">[${timestamp}]</span> <span class="console-error">${message}</span>`; break;
-        default: formattedMessage = `<span class="console-timestamp">[${timestamp}]</span> <span class="console-info">${message}</span>`;
-    }
-    
-    logEntry.innerHTML = formattedMessage;
-    consoleContent.appendChild(logEntry);
+    const logLine = document.createElement('div');
+    logLine.className = 'console-line';
+    let color = '#00ff9d';
+    if (type === 'error') color = '#ff4444';
+    else if (type === 'success') color = '#4CAF50';
+    else if (type === 'action') color = '#FFB347';
+    logLine.innerHTML = `<span style="color: #FFB347;">[${timestamp}]</span> <span style="color: ${color}">${escapeHtml(message)}</span>`;
+    consoleContent.appendChild(logLine);
     consoleContent.scrollTop = consoleContent.scrollHeight;
+}
+
+function showCustomConsole() { 
+    const consoleEl = document.getElementById('customConsole');
+    if (consoleEl) consoleEl.style.display = 'flex';
+}
+function hideCustomConsole() { 
+    const consoleEl = document.getElementById('customConsole');
+    if (consoleEl) consoleEl.style.display = 'none';
+}
+function clearCustomConsole() {
+    const consoleContent = document.getElementById('customConsoleContent');
+    if (consoleContent) consoleContent.innerHTML = '';
+    customConsoleLog('Console cleared.', 'info');
+}
+
+function executeConsoleCommand() {
+    const input = document.getElementById('consoleCommandInput');
+    const command = input.value.trim();
+    if (!command) return;
+    customConsoleLog(`> ${command}`, 'action');
+    if (command === 'help') {
+        customConsoleLog('Available commands: stats, clear, help', 'info');
+        customConsoleLog('  stats - Show system statistics', 'info');
+        customConsoleLog('  clear - Clear console', 'info');
+        customConsoleLog('  help - Show this help', 'info');
+    } else if (command === 'clear') {
+        const consoleContent = document.getElementById('customConsoleContent');
+        if (consoleContent) consoleContent.innerHTML = '';
+        customConsoleLog('Console cleared.', 'info');
+    } else if (command === 'stats') {
+        customConsoleLog(`System Statistics:`, 'success');
+        customConsoleLog(`- Students: ${usersDB.students.length}`, 'info');
+        customConsoleLog(`- Admins: ${usersDB.admins.length}`, 'info');
+        let totalEnrollments = usersDB.students.reduce((sum, s) => sum + (s.enrolledSubjects?.length || 0), 0);
+        customConsoleLog(`- Total Enrollments: ${totalEnrollments}`, 'info');
+        let completedReg = usersDB.students.filter(s => s.registrationCompleted).length;
+        customConsoleLog(`- Completed Registrations: ${completedReg}`, 'info');
+    } else {
+        customConsoleLog(`Unknown command: ${command}. Type 'help'`, 'error');
+    }
+    input.value = '';
+}
+
+// ============ DEVELOPER MODE ==========
+function showDeveloperPrompt() {
+    const promptEl = document.getElementById('customDevPrompt');
+    if (promptEl) promptEl.style.display = 'flex';
+}
+
+function closeDeveloperPrompt() {
+    const promptEl = document.getElementById('customDevPrompt');
+    if (promptEl) promptEl.style.display = 'none';
+    const codeInput = document.getElementById('devCodeInput');
+    if (codeInput) codeInput.value = '';
+}
+
+function verifyDeveloperCode() {
+    const codeInput = document.getElementById('devCodeInput');
+    const code = codeInput ? codeInput.value : '';
+    if (code === "712189") {
+        closeDeveloperPrompt();
+        enterDeveloperMode();
+    } else {
+        showCustomNotification("Invalid Developer Code", "error");
+        if (codeInput) codeInput.value = '';
+    }
+}
+
+function enterDeveloperMode() {
+    isDeveloperModeActive = true;
+    const loginPage = document.getElementById('loginPage');
+    const mainApp = document.getElementById('mainAppContainer');
+    const devDashboard = document.getElementById('developerDashboard');
+    if (loginPage) loginPage.style.display = 'none';
+    if (mainApp) mainApp.style.display = 'none';
+    if (devDashboard) devDashboard.style.display = 'flex';
+    updateDeveloperStats();
+    addTerminalLine('Developer Command Center Activated', 'success');
+    addTerminalLine('Student list is displayed below. Use refresh button to update.', 'info');
+}
+
+function exitDeveloperMode() {
+    isDeveloperModeActive = false;
+    const devDashboard = document.getElementById('developerDashboard');
+    if (devDashboard) devDashboard.style.display = 'none';
+    showLoginPage();
+}
+
+function addTerminalLine(message, type = 'info') {
+    const output = document.getElementById('devTerminalOutput');
+    if (!output) return;
+    const line = document.createElement('div');
+    line.className = `terminal-line ${type}`;
+    line.innerHTML = `> ${escapeHtml(message)}`;
+    output.appendChild(line);
+    output.scrollTop = output.scrollHeight;
+}
+
+function updateDeveloperStats() {
+    const totalStudents = document.getElementById('devTotalStudents');
+    const totalAdmins = document.getElementById('devTotalAdmins');
+    const totalEnrollmentsEl = document.getElementById('devTotalEnrollments');
+    const storageSizeEl = document.getElementById('devStorageSize');
     
-    if(autoShow) {
-        showConsole();
-        if(type !== 'error') setTimeout(() => closeConsole(), 4000);
+    if (totalStudents) totalStudents.textContent = usersDB.students.length;
+    if (totalAdmins) totalAdmins.textContent = usersDB.admins.length;
+    let totalEnrollments = usersDB.students.reduce((sum, s) => sum + (s.enrolledSubjects?.length || 0), 0);
+    if (totalEnrollmentsEl) totalEnrollmentsEl.textContent = totalEnrollments;
+    let storageSize = (JSON.stringify(usersDB).length / 1024).toFixed(2);
+    if (storageSizeEl) storageSizeEl.textContent = `${storageSize} KB`;
+    updateDeveloperChart();
+    loadDeveloperStudentTable();
+    addTerminalLine(`Statistics updated: ${usersDB.students.length} students`, 'info');
+}
+
+function updateDeveloperChart() {
+    const ctx = document.getElementById('devStudentChart')?.getContext('2d');
+    if (!ctx) return;
+    const cumulativeData = [];
+    for (let i = 1; i <= 5; i++) {
+        cumulativeData.push(Math.floor(usersDB.students.length * (i / 5)));
+    }
+    if (devStudentChart) devStudentChart.destroy();
+    devStudentChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Current'],
+            datasets: [{
+                label: 'Student Registrations',
+                data: cumulativeData,
+                borderColor: '#FFB347',
+                backgroundColor: 'rgba(255, 179, 71, 0.1)',
+                fill: true,
+                tension: 0.4,
+                pointBackgroundColor: '#FFB347',
+                pointBorderColor: '#fff',
+                pointRadius: 5,
+                pointHoverRadius: 7
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { labels: { color: '#e2e8f0' } },
+                tooltip: { backgroundColor: '#1a1a2e', titleColor: '#FFB347', bodyColor: '#e2e8f0' }
+            },
+            scales: {
+                y: { grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#e2e8f0' } },
+                x: { grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#e2e8f0' } }
+            }
+        }
+    });
+}
+
+function toggleDevPassword(element, password) {
+    const td = element.parentElement;
+    if (td.innerHTML.includes('••••••••')) {
+        td.innerHTML = password + ' <button onclick="window.toggleDevPassword(this, \'' + password.replace(/'/g, "\\'") + '\')" class="toggle-password-dev">Hide</button>';
+    } else {
+        td.innerHTML = '•••••••• <button onclick="window.toggleDevPassword(this, \'' + password.replace(/'/g, "\\'") + '\')" class="toggle-password-dev">Show</button>';
     }
 }
 
-function showConsole() { 
-    const overlay = document.getElementById("consoleOverlay");
-    if (overlay) overlay.style.display = "flex";
+function loadDeveloperStudentTable() {
+    const container = document.getElementById('devStudentTable');
+    if (!container) return;
+    if (usersDB.students.length === 0) {
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-users-slash"></i><p>No student accounts found.</p><p>Create student accounts through the main login page.</p></div>';
+        return;
+    }
+    let html = `<div class="dev-table-wrapper"><table class="dev-table"><thead>
+        <tr>
+            <th>#</th><th>Full Name</th><th>Student ID</th><th>Password</th><th>Program/Course</th><th>Year/Grade</th>
+            <th>Education Level</th><th>Email</th><th>Contact</th><th>Address</th><th>Enrolled</th><th>Status</th><th>Login Count</th><th>Last Login</th><th>Actions</th>
+        </tr>
+    </thead><tbody>`;
+    
+    usersDB.students.forEach((student, index) => {
+        const lastLoginDate = student.lastLogin ? new Date(student.lastLogin).toLocaleString() : 'Never';
+        const regStatus = student.registrationCompleted ? '✓ Completed' : '⏳ Pending';
+        const statusColor = student.registrationCompleted ? '#4CAF50' : '#FFB347';
+        const enrolledCount = student.enrolledSubjects?.length || 0;
+        const educationLevel = student.level === 'juniorHigh' ? 'Junior High' : student.level === 'seniorHigh' ? 'Senior High' : student.level === 'college' ? 'College' : 'Not set';
+        const programDisplay = student.program || student.strand || 'Not set';
+        const yearDisplay = student.yearLevel || student.sublevel || 'Not set';
+        const escapedPassword = (student.password || '').replace(/'/g, "\\'");
+        
+        html += `<tr>
+            <td>${index + 1}</td>
+            <td><strong>${escapeHtml(student.name)}</strong></td>
+            <td style="font-family: monospace;">${student.id}</td>
+            <td class="password-cell">•••••••• <button onclick="window.toggleDevPassword(this, '${escapedPassword}')" class="toggle-password-dev">Show</button></td>
+            <td>${escapeHtml(programDisplay)}</td>
+            <td>${escapeHtml(yearDisplay)}</td>
+            <td>${educationLevel}</td>
+            <td>${student.email || 'N/A'}</td>
+            <td>${student.contact || 'N/A'}</td>
+            <td>${escapeHtml(student.address || 'N/A')}</td>
+            <td>${enrolledCount}</td>
+            <td><span style="color: ${statusColor}">${regStatus}</span></td>
+            <td>${student.loginCount || 0}</td>
+            <td style="font-size: 0.7rem;">${lastLoginDate}</td>
+            <td><button onclick="window.deleteStudentFromDev(${index})" class="delete-student-dev">Delete</button></td>
+        </tr>`;
+    });
+    html += `</tbody><td></div>`;
+    container.innerHTML = html;
 }
-function closeConsole() { 
-    const overlay = document.getElementById("consoleOverlay");
-    if (overlay) overlay.style.display = "none";
-}
-function clearConsole() { 
-    const consoleContent = document.getElementById('consoleContent');
-    if (consoleContent) {
-        consoleContent.innerHTML = '<div class="console-log"><span class="console-timestamp">[System]</span> <span class="console-info">Console cleared.</span></div>';
+
+function deleteStudentFromDev(index) {
+    if (confirm('⚠️ WARNING: This will permanently delete the student account and all associated data!\n\nAre you sure you want to continue?')) {
+        const studentName = usersDB.students[index].name;
+        usersDB.students.splice(index, 1);
+        saveData();
+        updateDeveloperStats();
+        addTerminalLine(`Student "${studentName}" deleted. Total students: ${usersDB.students.length}`, 'success');
+        showCustomNotification(`Student "${studentName}" has been deleted.`, 'success');
     }
 }
 
-document.getElementById("consoleOverlay")?.addEventListener("click", function(e) { if (e.target === this) closeConsole(); });
-document.addEventListener("keydown", function(e) { if (e.key === "Escape") closeConsole(); });
+function executeDevCommand() {
+    const input = document.getElementById('devTerminalCommand');
+    const command = input.value.trim().toLowerCase();
+    if (!command) return;
+    addTerminalLine(`${command}`, 'action');
+    switch(command) {
+        case 'help':
+            addTerminalLine('Available commands: help, stats, clear, refresh, export', 'info');
+            break;
+        case 'stats':
+            addTerminalLine(`Students: ${usersDB.students.length} | Admins: ${usersDB.admins.length}`, 'info');
+            break;
+        case 'clear':
+            const output = document.getElementById('devTerminalOutput');
+            if (output) output.innerHTML = '<div class="terminal-line">> System ready.</div>';
+            break;
+        case 'refresh':
+            loadDeveloperStudentTable();
+            addTerminalLine('Student table refreshed', 'success');
+            break;
+        case 'export':
+            const dataStr = JSON.stringify(usersDB, null, 2);
+            const blob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `students_export_${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            addTerminalLine('Data exported', 'success');
+            break;
+        default:
+            addTerminalLine(`Unknown command: ${command}`, 'error');
+    }
+    input.value = '';
+}
 
-// ============ PAGE TITLE UPDATER ============
-function updatePageTitleAndHeader(pageName) {
-    const titles = {
-        'dashboard': 'Dashboard', 'student-registration': 'Student Registration',
-        'self-enrollment': 'Self-Enrollment', 'student-records': 'Student Records',
-        'updates': 'Updates', 'sched-gen-1': 'Schedule Generator', 'login': 'System Access'
+// ============ DATA PERSISTENCE ==========
+function loadData() {
+    const savedUsers = localStorage.getItem('usersDB');
+    if (savedUsers) {
+        try {
+            usersDB = JSON.parse(savedUsers);
+            usersDB.students = usersDB.students.map(s => ({
+                ...s,
+                enrolledSubjects: s.enrolledSubjects || [],
+                grades: s.grades || {},
+                attendance: s.attendance || {},
+                registrationCompleted: s.registrationCompleted || false,
+                loginCount: s.loginCount || 0,
+                scheduleConfirmed: s.scheduleConfirmed || false
+            }));
+        } catch(e) {
+            initializeDefaultData();
+        }
+    } else {
+        initializeDefaultData();
+    }
+}
+
+function initializeDefaultData() {
+    usersDB = { students: [], admins: [] };
+    usersDB.admins.push({ 
+        email: "admin@school.edu", 
+        password: "admin123", 
+        name: "Professor Maria Santos", 
+        lastLogin: null 
+    });
+    saveData();
+}
+
+function saveData() { 
+    try {
+        localStorage.setItem('usersDB', JSON.stringify(usersDB));
+    } catch(e) {
+        customConsoleLog('Error saving data: ' + e.message, 'error');
+    }
+}
+
+loadData();
+
+function loadNotifications() { 
+    const saved = localStorage.getItem('notificationsDB'); 
+    if (saved) {
+        try {
+            notificationsDB = JSON.parse(saved);
+        } catch(e) {
+            notificationsDB = { schedule: [], room: [], professor: [] };
+        }
+    }
+}
+function saveNotifications() { localStorage.setItem('notificationsDB', JSON.stringify(notificationsDB)); }
+loadNotifications();
+
+// ============ LOGIN MANAGEMENT ==========
+function showLoginPage() { 
+    const loginPage = document.getElementById('loginPage');
+    const mainApp = document.getElementById('mainAppContainer');
+    if (loginPage) loginPage.style.display = 'flex';
+    if (mainApp) mainApp.style.display = 'none';
+    initializeLoginPanels(); 
+    loadRememberedCredentials(); 
+}
+function showMainApp() { 
+    const loginPage = document.getElementById('loginPage');
+    const mainApp = document.getElementById('mainAppContainer');
+    if (loginPage) loginPage.style.display = 'none';
+    if (mainApp) mainApp.style.display = 'flex';
+}
+
+function clearSavedCredentials() {
+    localStorage.removeItem('rememberedId');
+    localStorage.removeItem('rememberedPassword');
+    localStorage.removeItem('rememberedIsAdmin');
+    localStorage.removeItem('rememberMeFlag');
+}
+
+function saveRememberedCredentials(id, password, isAdmin = false) {
+    const studentRememberMe = document.getElementById('rememberMe')?.checked;
+    const adminRememberMe = document.getElementById('rememberMeAdmin')?.checked;
+    const rememberMeChecked = isAdmin ? adminRememberMe : studentRememberMe;
+    
+    if (rememberMeChecked) {
+        localStorage.setItem('rememberedId', id);
+        localStorage.setItem('rememberedPassword', password);
+        localStorage.setItem('rememberedIsAdmin', isAdmin);
+        localStorage.setItem('rememberMeFlag', 'true');
+    } else {
+        clearSavedCredentials();
+    }
+}
+
+function loadRememberedCredentials() {
+    const rememberMeFlag = localStorage.getItem('rememberMeFlag');
+    const rememberedId = localStorage.getItem('rememberedId');
+    const rememberedPassword = localStorage.getItem('rememberedPassword');
+    const rememberedIsAdmin = localStorage.getItem('rememberedIsAdmin');
+    
+    if (rememberMeFlag === 'true' && rememberedId && rememberedPassword) {
+        if (rememberedIsAdmin === 'true') {
+            const adminEmail = document.getElementById('loginAdminEmail');
+            const adminPwd = document.getElementById('loginAdminPassword');
+            const adminCheckbox = document.getElementById('rememberMeAdmin');
+            if (adminEmail) adminEmail.value = rememberedId;
+            if (adminPwd) adminPwd.value = rememberedPassword;
+            if (adminCheckbox) adminCheckbox.checked = true;
+            const adminTab = document.querySelector('.login-tab-btn[data-login-tab="admin"]');
+            if (adminTab) adminTab.click();
+        } else {
+            const studentId = document.getElementById('loginStudentId');
+            const studentPwd = document.getElementById('loginStudentPassword');
+            const studentCheckbox = document.getElementById('rememberMe');
+            if (studentId) studentId.value = rememberedId;
+            if (studentPwd) studentPwd.value = rememberedPassword;
+            if (studentCheckbox) studentCheckbox.checked = true;
+        }
+    } else {
+        clearSavedCredentials();
+    }
+}
+
+function initializeLoginPanels() {
+    const studentLogin = document.getElementById('studentLoginForm');
+    const adminLogin = document.getElementById('adminLoginForm');
+    const studentSignup = document.getElementById('studentSignupPanel');
+    const adminSignup = document.getElementById('adminSignupPanel');
+    const forgotPwd = document.getElementById('forgotPasswordPanel');
+    
+    if (studentLogin) studentLogin.style.display = 'block';
+    if (adminLogin) adminLogin.style.display = 'none';
+    if (studentSignup) studentSignup.style.display = 'none';
+    if (adminSignup) adminSignup.style.display = 'none';
+    if (forgotPwd) forgotPwd.style.display = 'none';
+    
+    const activeTab = document.querySelector('.login-tab-btn.active');
+    if (activeTab && activeTab.getAttribute('data-login-tab') === 'admin') {
+        const studentTab = document.querySelector('.login-tab-btn[data-login-tab="student"]');
+        if (studentTab) studentTab.click();
+    }
+}
+
+function setupLoginTabs() {
+    document.querySelectorAll('.login-tab-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.login-tab-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            const tab = this.getAttribute('data-login-tab');
+            const studentLogin = document.getElementById('studentLoginForm');
+            const adminLogin = document.getElementById('adminLoginForm');
+            const studentSignup = document.getElementById('studentSignupPanel');
+            const adminSignup = document.getElementById('adminSignupPanel');
+            const forgotPwd = document.getElementById('forgotPasswordPanel');
+            
+            if (studentLogin) studentLogin.style.display = tab === 'student' ? 'block' : 'none';
+            if (adminLogin) adminLogin.style.display = tab === 'admin' ? 'block' : 'none';
+            if (studentSignup) studentSignup.style.display = 'none';
+            if (adminSignup) adminSignup.style.display = 'none';
+            if (forgotPwd) forgotPwd.style.display = 'none';
+        });
+    });
+}
+
+function validatePassword(password) {
+    return { 
+        length: password.length >= 12, 
+        uppercase: /[A-Z]/.test(password), 
+        number: /[0-9]/.test(password), 
+        special: /[!@#$%^&*(),.?":{}|<>]/.test(password) 
     };
-    document.title = `${titles[pageName] || 'Algorithmic Agenda'} - Algorithmic Agenda`;
-    const pageHeader = document.getElementById('pageTitle');
-    if (pageHeader) pageHeader.textContent = titles[pageName] || 'Algorithmic Agenda';
 }
 
-// ============ CREDITS MODAL ============
-function showCredits() {
-    const overlay = document.getElementById('creditsOverlay');
-    if (overlay) overlay.style.display = 'flex';
+function updatePasswordUI() {
+    const password = document.getElementById('signupPassword')?.value || '';
+    const reqs = validatePassword(password);
+    const lengthEl = document.getElementById('reqLength');
+    const upperEl = document.getElementById('reqUppercase');
+    const numEl = document.getElementById('reqNumber');
+    const specialEl = document.getElementById('reqSpecial');
+    if (lengthEl) lengthEl.style.color = reqs.length ? '#10B981' : '#ef4444';
+    if (upperEl) upperEl.style.color = reqs.uppercase ? '#10B981' : '#ef4444';
+    if (numEl) numEl.style.color = reqs.number ? '#10B981' : '#ef4444';
+    if (specialEl) specialEl.style.color = reqs.special ? '#10B981' : '#ef4444';
+    return reqs.length && reqs.uppercase && reqs.number && reqs.special;
 }
-function closeCredits() {
-    const overlay = document.getElementById('creditsOverlay');
-    if (overlay) overlay.style.display = 'none';
+
+function togglePassword(inputId) { 
+    const input = document.getElementById(inputId); 
+    if (input) input.type = input.type === 'password' ? 'text' : 'password'; 
 }
-document.getElementById('creditsBtn')?.addEventListener('click', showCredits);
-document.getElementById('creditsOverlay')?.addEventListener('click', function(e) { if (e.target === this) closeCredits(); });
 
-// ============ COMPLETE CURRICULUM DATABASE ============
-const highSchoolCurriculum = {
-    "Grade 9": [
-        { name: "English 9", room: "RM 201", professor: "Prof. Maria Santos", category: "core" },
-        { name: "Mathematics 9", room: "RM 202", professor: "Prof. Jose Rizal", category: "core" },
-        { name: "Science 9", room: "LAB 101", professor: "Prof. Gregorio Y. Zara", category: "core" },
-        { name: "Araling Panlipunan 9", room: "RM 203", professor: "Prof. Teodoro Agoncillo", category: "core" },
-        { name: "Filipino 9", room: "RM 204", professor: "Prof. Virgilio Almario", category: "core" },
-        { name: "MAPEH 9", room: "GYM 1", professor: "Prof. Francisca Aquino", category: "major" },
-        { name: "TLE 9", room: "WSHOP 1", professor: "Prof. Ramon Magsaysay", category: "major" },
-        { name: "Values Education 9", room: "RM 205", professor: "Prof. Carmen Perez", category: "core" }
-    ],
-    "Grade 10": [
-        { name: "English 10", room: "RM 206", professor: "Prof. Maria Santos", category: "core" },
-        { name: "Mathematics 10", room: "RM 207", professor: "Prof. Jose Rizal", category: "core" },
-        { name: "Science 10", room: "LAB 102", professor: "Prof. Gregorio Y. Zara", category: "core" },
-        { name: "Araling Panlipunan 10", room: "RM 208", professor: "Prof. Teodoro Agoncillo", category: "core" },
-        { name: "Filipino 10", room: "RM 209", professor: "Prof. Virgilio Almario", category: "core" },
-        { name: "MAPEH 10", room: "GYM 1", professor: "Prof. Francisca Aquino", category: "major" },
-        { name: "Research 10", room: "LIB 101", professor: "Prof. Fe Del Mundo", category: "major" }
-    ],
-    "Grade 11": [
-        { name: "21st Century Literature", room: "RM 301", professor: "Prof. F. Sionil Jose", category: "core" },
-        { name: "Oral Communication", room: "RM 302", professor: "Prof. Lualhati Bautista", category: "core" },
-        { name: "General Mathematics", room: "RM 306", professor: "Prof. Jose Rizal", category: "core" },
-        { name: "Statistics", room: "RM 307", professor: "Prof. Raymundo Favila", category: "core" },
-        { name: "Earth Science", room: "LAB 201", professor: "Prof. Gregorio Y. Zara", category: "core" },
-        { name: "Personal Development", room: "RM 308", professor: "Prof. Carmen Perez", category: "major" }
-    ],
-    "Grade 12": [
-        { name: "Contemporary Arts", room: "RM 310", professor: "Prof. Carlos Francisco", category: "core" },
-        { name: "Media Literacy", room: "COMP LAB 3", professor: "Prof. Diosdado Banatao", category: "core" },
-        { name: "Practical Research 1", room: "LIB 102", professor: "Prof. Fe Del Mundo", category: "core" },
-        { name: "Entrepreneurship", room: "RM 313", professor: "Prof. Socorro Ramos", category: "major" },
-        { name: "Empowerment Technologies", room: "COMP LAB 4", professor: "Prof. Diosdado Banatao", category: "major" }
-    ]
-};
+// ============ SCHEDULE ASSIGNMENT ==========
+const scheduleTimeSlots = [
+    "Monday 8:00 AM - 10:00 AM", "Monday 10:00 AM - 12:00 PM", "Monday 1:00 PM - 3:00 PM", "Monday 3:00 PM - 5:00 PM",
+    "Tuesday 8:00 AM - 10:00 AM", "Tuesday 10:00 AM - 12:00 PM", "Tuesday 1:00 PM - 3:00 PM", "Tuesday 3:00 PM - 5:00 PM",
+    "Wednesday 8:00 AM - 10:00 AM", "Wednesday 10:00 AM - 12:00 PM", "Wednesday 1:00 PM - 3:00 PM", "Wednesday 3:00 PM - 5:00 PM",
+    "Thursday 8:00 AM - 10:00 AM", "Thursday 10:00 AM - 12:00 PM", "Thursday 1:00 PM - 3:00 PM", "Thursday 3:00 PM - 5:00 PM",
+    "Friday 8:00 AM - 10:00 AM", "Friday 10:00 AM - 12:00 PM", "Friday 1:00 PM - 3:00 PM", "Friday 3:00 PM - 5:00 PM"
+];
 
-const collegeCurriculum = {
-    "Bachelor of Science in Information Technology": {
-        "1st Year": [
-            { name: "Introduction to Computing", room: "IT LAB 101", professor: "Prof. James Dela Cruz", category: "core" },
-            { name: "Computer Programming 1", room: "IT LAB 101", professor: "Prof. Michael Santos", category: "major" },
-            { name: "Mathematics in the Modern World", room: "RM 401", professor: "Prof. Jose Rizal", category: "core" },
-            { name: "Purposive Communication", room: "RM 402", professor: "Prof. Maria Santos", category: "core" },
-            { name: "Understanding the Self", room: "RM 403", professor: "Prof. Carmen Perez", category: "core" }
-        ],
-        "2nd Year": [
-            { name: "Computer Programming 2", room: "IT LAB 201", professor: "Prof. Michael Santos", category: "major" },
-            { name: "Data Structures", room: "IT LAB 201", professor: "Prof. Jennifer Cruz", category: "major" },
-            { name: "Object-Oriented Programming", room: "IT LAB 202", professor: "Prof. Daniel Tan", category: "major" },
-            { name: "Networking 1", room: "NET LAB 301", professor: "Prof. Christopher Lee", category: "major" },
-            { name: "Database Systems", room: "IT LAB 203", professor: "Prof. Angela Martinez", category: "major" }
-        ],
-        "3rd Year": [
-            { name: "Integrative Programming", room: "IT LAB 301", professor: "Prof. Daniel Tan", category: "major" },
-            { name: "Mobile Technologies", room: "IT LAB 301", professor: "Prof. Patricia Lim", category: "major" },
-            { name: "Advanced Database", room: "IT LAB 302", professor: "Prof. Angela Martinez", category: "major" },
-            { name: "Networking 2", room: "NET LAB 302", professor: "Prof. Christopher Lee", category: "major" },
-            { name: "Software Engineering", room: "IT LAB 304", professor: "Prof. Daniel Tan", category: "major" }
-        ],
-        "4th Year": [
-            { name: "Capstone Project 1", room: "IT LAB 401", professor: "Prof. James Dela Cruz", category: "major" },
-            { name: "Capstone Project 2", room: "IT LAB 401", professor: "Prof. Jennifer Cruz", category: "major" },
-            { name: "Cloud Computing", room: "IT LAB 402", professor: "Prof. Christopher Lee", category: "elective" },
-            { name: "Web and Mobile UX", room: "IT LAB 402", professor: "Prof. Patricia Lim", category: "elective" },
-            { name: "Practicum", room: "OFFSITE", professor: "Industry Supervisor", category: "major" }
-        ]
-    },
-    "Bachelor of Science in Computer Science": {
-        "1st Year": [
-            { name: "Introduction to Computing", room: "CS LAB 101", professor: "Prof. James Dela Cruz", category: "core" },
-            { name: "Fundamentals of Programming", room: "CS LAB 101", professor: "Prof. Michael Santos", category: "major" },
-            { name: "Discrete Structures 1", room: "RM 409", professor: "Prof. Jose Rizal", category: "core" },
-            { name: "Purposive Communication", room: "RM 411", professor: "Prof. Maria Santos", category: "core" }
-        ],
-        "2nd Year": [
-            { name: "Data Structures", room: "CS LAB 201", professor: "Prof. Jennifer Cruz", category: "major" },
-            { name: "Object-Oriented Programming", room: "CS LAB 202", professor: "Prof. Daniel Tan", category: "major" },
-            { name: "Operating Systems", room: "CS LAB 203", professor: "Prof. James Dela Cruz", category: "major" },
-            { name: "Algorithms", room: "CS LAB 204", professor: "Prof. Jennifer Cruz", category: "major" }
-        ],
-        "3rd Year": [
-            { name: "Software Engineering", room: "CS LAB 301", professor: "Prof. Daniel Tan", category: "major" },
-            { name: "Networks", room: "NET LAB 303", professor: "Prof. Christopher Lee", category: "major" },
-            { name: "Intelligent Systems", room: "CS LAB 303", professor: "Prof. Jennifer Cruz", category: "elective" },
-            { name: "Thesis 1", room: "CS LAB 401", professor: "Prof. Jennifer Cruz", category: "major" }
-        ],
-        "4th Year": [
-            { name: "Thesis 2", room: "CS LAB 401", professor: "Prof. Daniel Tan", category: "major" },
-            { name: "Machine Learning", room: "CS LAB 402", professor: "Prof. Patricia Lim", category: "elective" },
-            { name: "Practicum", room: "OFFSITE", professor: "Industry Supervisor", category: "major" }
-        ]
-    },
-    "Bachelor of Science in Nursing": {
-        "1st Year": [
-            { name: "Anatomy and Physiology", room: "NUR LAB 101", professor: "Prof. Richard Mendoza", category: "core" },
-            { name: "Microbiology", room: "NUR LAB 102", professor: "Prof. Susan Rivera", category: "core" },
-            { name: "Foundations of Nursing", room: "NUR LAB 103", professor: "Prof. Susan Rivera", category: "major" }
-        ],
-        "2nd Year": [
-            { name: "Health Assessment", room: "NUR LAB 201", professor: "Prof. Susan Rivera", category: "major" },
-            { name: "Pharmacology", room: "NUR LAB 203", professor: "Prof. Maria Garcia", category: "major" },
-            { name: "Adult Health Nursing 1", room: "NUR LAB 203", professor: "Prof. Richard Mendoza", category: "major" }
-        ],
-        "3rd Year": [
-            { name: "Adult Health Nursing 2", room: "NUR LAB 301", professor: "Prof. Susan Rivera", category: "major" },
-            { name: "Child Health Nursing", room: "NUR LAB 301", professor: "Prof. Richard Mendoza", category: "major" },
-            { name: "Psychiatric Nursing", room: "NUR LAB 302", professor: "Prof. Carmen Perez", category: "major" }
-        ],
-        "4th Year": [
-            { name: "Community Health Nursing", room: "NUR LAB 401", professor: "Prof. Susan Rivera", category: "major" },
-            { name: "Intensive Practicum", room: "CLINICAL", professor: "Clinical Instructor", category: "major" },
-            { name: "Competency Appraisal", room: "NUR LAB 403", professor: "Prof. Susan Rivera", category: "major" }
-        ]
-    },
-    "Bachelor of Science in Tourism Management": {
-        "1st Year": [
-            { name: "Introduction to Tourism", room: "TOUR 101", professor: "Prof. Christine Flores", category: "core" },
-            { name: "Principles of Management", room: "TOUR 102", professor: "Prof. Mark Rivera", category: "core" },
-            { name: "Marketing Fundamentals", room: "TOUR 103", professor: "Prof. Christine Flores", category: "major" }
-        ],
-        "2nd Year": [
-            { name: "Tourism Planning", room: "TOUR 201", professor: "Prof. Christine Flores", category: "major" },
-            { name: "Event Management", room: "TOUR 204", professor: "Prof. Mark Rivera", category: "major" },
-            { name: "Quality Service", room: "TOUR 206", professor: "Prof. Maria Santos", category: "major" }
-        ],
-        "3rd Year": [
-            { name: "Strategic Management", room: "TOUR 301", professor: "Prof. Mark Rivera", category: "major" },
-            { name: "Destination Marketing", room: "TOUR 302", professor: "Prof. Christine Flores", category: "major" },
-            { name: "International Tourism", room: "TOUR 304", professor: "Prof. Christine Flores", category: "elective" }
-        ],
-        "4th Year": [
-            { name: "Tourism Research", room: "TOUR 401", professor: "Prof. Fe Del Mundo", category: "major" },
-            { name: "Tourism Practicum", room: "OFFSITE", professor: "Industry Supervisor", category: "major" }
-        ]
-    },
-    "Bachelor of Science in Civil Engineering": {
-        "1st Year": [
-            { name: "Calculus 1", room: "ENG 101", professor: "Prof. Robert Reyes", category: "core" },
-            { name: "Physics for Engineers", room: "PHY LAB 101", professor: "Prof. William Ong", category: "core" },
-            { name: "Engineering Drawing", room: "ENG DRAW 101", professor: "Prof. Victor Santos", category: "major" }
-        ],
-        "2nd Year": [
-            { name: "Differential Equations", room: "ENG 201", professor: "Prof. Robert Reyes", category: "core" },
-            { name: "Mechanics", room: "ENG 203", professor: "Prof. Victor Santos", category: "major" },
-            { name: "Fluid Mechanics", room: "ENG 204", professor: "Prof. William Ong", category: "major" }
-        ],
-        "3rd Year": [
-            { name: "Structural Theory", room: "ENG 301", professor: "Prof. Victor Santos", category: "major" },
-            { name: "Steel Design", room: "ENG 302", professor: "Prof. Victor Santos", category: "major" },
-            { name: "Geotechnical Engineering", room: "ENG 303", professor: "Prof. William Ong", category: "major" }
-        ],
-        "4th Year": [
-            { name: "Concrete Design", room: "ENG 401", professor: "Prof. Victor Santos", category: "major" },
-            { name: "Construction Management", room: "ENG 402", professor: "Prof. Victor Santos", category: "major" },
-            { name: "Capstone Project", room: "ENG 407", professor: "Prof. Victor Santos", category: "major" }
-        ]
-    },
-    "Bachelor of Arts in Literature": {
-        "1st Year": [
-            { name: "Introduction to Literature", room: "LIT 101", professor: "Prof. Nick Joaquin", category: "core" },
-            { name: "Creative Writing", room: "LIT 106", professor: "Prof. Nick Joaquin", category: "major" }
-        ],
-        "2nd Year": [
-            { name: "Shakespeare", room: "LIT 201", professor: "Prof. Nick Joaquin", category: "major" },
-            { name: "World Literature", room: "LIT 205", professor: "Prof. F. Sionil Jose", category: "core" }
-        ],
-        "3rd Year": [
-            { name: "Philippine Literature", room: "LIT 301", professor: "Prof. Nick Joaquin", category: "major" },
-            { name: "Literary Criticism", room: "LIT 303", professor: "Prof. Lualhati Bautista", category: "major" }
-        ],
-        "4th Year": [
-            { name: "Advanced Literary Theory", room: "LIT 401", professor: "Prof. Nick Joaquin", category: "major" },
-            { name: "Capstone Portfolio", room: "LIT 404", professor: "Prof. Nick Joaquin", category: "major" }
-        ]
-    },
-    "Bachelor of Science in Astronomy": {
-        "1st Year": [
-            { name: "University Physics 1", room: "PHY LAB 201", professor: "Prof. William Ong", category: "core" },
-            { name: "Introduction to Astronomy", room: "AST LAB 101", professor: "Prof. William Ong", category: "major" }
-        ],
-        "2nd Year": [
-            { name: "Introduction to Astrophysics", room: "AST 201", professor: "Prof. William Ong", category: "major" },
-            { name: "Modern Physics", room: "PHY LAB 204", professor: "Prof. William Ong", category: "core" }
-        ],
-        "3rd Year": [
-            { name: "Astrophysics: Stars", room: "AST 301", professor: "Prof. William Ong", category: "major" },
-            { name: "Scientific Computing", room: "AST COMP LAB", professor: "Prof. James Dela Cruz", category: "elective" }
-        ],
-        "4th Year": [
-            { name: "Galaxies and Cosmology", room: "AST 401", professor: "Prof. William Ong", category: "major" },
-            { name: "Capstone Research", room: "AST LAB 401", professor: "Prof. William Ong", category: "major" }
-        ]
-    }
-};
+function getSubjectSchedule(subjectName, index) {
+    const hash = (subjectName.length * 7 + index * 13) % scheduleTimeSlots.length;
+    const secondHash = (hash + 7) % scheduleTimeSlots.length;
+    return `${scheduleTimeSlots[hash]}; ${scheduleTimeSlots[secondHash]}`;
+}
 
-function getSubjectsForProgram(program, isHighschool, yearLevel) {
-    if (isHighschool) {
-        return highSchoolCurriculum[yearLevel] || [];
-    }
-    return collegeCurriculum[program]?.[yearLevel] || [];
+function assignSchedulesToSubjects(subjects) {
+    return subjects.map((subject, idx) => ({
+        ...subject,
+        schedule: getSubjectSchedule(subject.name, idx)
+    }));
 }
 
 function getScheduleInfo(subject) {
-    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-    const times = ["8:00 AM - 10:00 AM", "10:00 AM - 12:00 PM", "1:00 PM - 3:00 PM", "3:00 PM - 5:00 PM"];
-    const hash = subject.name.length;
+    const schedules = subject.schedule ? subject.schedule.split('; ') : ["Monday 8:00 AM - 10:00 AM"];
     return {
-        day: days[hash % 5],
-        time: times[hash % 4],
+        schedules: schedules.map(s => {
+            const parts = s.split(' ');
+            return { day: parts[0], time: parts.slice(1).join(' ') };
+        }),
         room: subject.room,
         professor: subject.professor,
-        timeSlot: hash % 2 === 0 ? "7-10" : "1-4"
+        category: subject.category,
+        units: subject.units || 3
     };
+}
+
+function renderScheduleTable(subjects, containerId) {
+    console.log("renderScheduleTable called with", subjects, "subjects, containerId:", containerId);
+    
+    const container = document.getElementById(containerId);
+    if (!container) {
+        console.error("Container not found:", containerId);
+        customConsoleLog(`ERROR: Container ${containerId} not found`, 'error');
+        return;
+    }
+    
+    if (!subjects || subjects.length === 0) {
+        const isPreview = containerId === 'previewScheduleTable';
+        const headline = isPreview
+            ? 'No subjects selected yet.'
+            : 'No subjects enrolled yet.';
+        const subline = isPreview
+            ? 'Tick a subject from the list above to see it appear on this schedule canvas.'
+            : 'Please go to Self-Enrollment to select your subjects.';
+        container.innerHTML = `<div style="text-align: center; padding: 40px; color: #666;"><i class="fas fa-book-open" style="font-size: 48px; margin-bottom: 16px; display: block;"></i><p>${headline}</p><p>${subline}</p></div>`;
+        return;
+    }
+    
+    // Create days and times
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+    const times = ["8:00 AM - 10:00 AM", "10:00 AM - 12:00 PM", "1:00 PM - 3:00 PM", "3:00 PM - 5:00 PM"];
+    
+    // Create schedule grid
+    let scheduleGrid = {};
+    days.forEach(day => {
+        scheduleGrid[day] = {};
+        times.forEach(time => {
+            scheduleGrid[day][time] = null;
+        });
+    });
+    
+    // Fill schedule grid with subjects
+    subjects.forEach((subject, idx) => {
+        // Get schedule info for this subject
+        let subjectSchedule = subject.schedule || "";
+        let scheduleParts = subjectSchedule.split('; ');
+        
+        scheduleParts.forEach((part, partIdx) => {
+            if (part && part.trim()) {
+                // Find matching day and time
+                for (let day of days) {
+                    if (part.includes(day)) {
+                        let timePart = part.replace(day, "").trim();
+                        for (let time of times) {
+                            if (timePart === time) {
+                                if (scheduleGrid[day][time] === null) {
+                                    scheduleGrid[day][time] = subject;
+                                }
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        });
+    });
+    
+    // Build HTML table
+    let html = '<div style="overflow-x: auto;">';
+    html += '<table style="width: 100%; border-collapse: collapse; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">';
+    
+    // Table header
+    html += '<thead><tr style="background: linear-gradient(135deg, #FFB347, #FF8C00); color: white;">';
+    html += '<th style="padding: 14px; text-align: center; font-weight: 600;">Time</th>';
+    days.forEach(day => {
+        html += `<th style="padding: 14px; text-align: center; font-weight: 600;">${day}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+    
+    // Table rows for each time slot
+    times.forEach(time => {
+        html += '<tr style="border-bottom: 1px solid #e2e8f0;">';
+        html += `<td style="padding: 12px; background: #f8fafc; font-weight: 600; text-align: center; border: 1px solid #e2e8f0;">${time}</td>`;
+        
+        days.forEach(day => {
+            const subject = scheduleGrid[day][time];
+            if (subject) {
+                html += `<td style="padding: 12px; border: 1px solid #e2e8f0; vertical-align: top; background: white;">
+                            <div style="font-weight: 700; color: #1e4a6f; margin-bottom: 6px;">${escapeHtml(subject.name)}</div>
+                            <div style="font-size: 11px; color: #10B981; margin-top: 4px;"><i class="fas fa-door-open"></i> ${escapeHtml(subject.room)}</div>
+                            <div style="font-size: 11px; color: #FFB347; margin-top: 2px;"><i class="fas fa-chalkboard-teacher"></i> ${escapeHtml(subject.professor)}</div>
+                           </td>`;
+            } else {
+                html += `<td style="padding: 12px; border: 1px solid #e2e8f0; text-align: center; color: #94a3b8; font-style: italic; background: #fefefe;">— Free —</td>`;
+            }
+        });
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+    console.log("Schedule table rendered successfully with", subjects.length, "subjects");
+    customConsoleLog(`Schedule displayed for ${subjects.length} subjects`, 'success');
 }
 
 function generateStudentId() {
@@ -298,940 +686,2811 @@ function generateStudentId() {
     const existingIds = usersDB.students.map(s => s.id);
     let maxSeq = 0;
     const pattern = new RegExp(`^${year}${month}${day}-(\\d+)$`);
-    existingIds.forEach(id => {
-        const match = id.match(pattern);
-        if (match) maxSeq = Math.max(maxSeq, parseInt(match[1]));
-    });
+    existingIds.forEach(id => { const match = id.match(pattern); if (match) maxSeq = Math.max(maxSeq, parseInt(match[1])); });
     return `${year}${month}${day}-${String(maxSeq + 1).padStart(4, '0')}`;
 }
 
-function loadNotifications() {
-    const saved = localStorage.getItem('notificationsDB');
-    if (saved) {
-        notificationsDB = JSON.parse(saved);
+function unlockScheduleGenerator() {
+    const schedGenLink = document.getElementById('schedGenNavItem');
+    if (schedGenLink && currentUser?.type === 'student') {
+        const link = schedGenLink.querySelector('a');
+        if (link) {
+            link.style.opacity = '1';
+            link.style.pointerEvents = 'auto';
+            const span = link.querySelector('span');
+            if (span) span.textContent = 'Sched. Gen.';
+        }
     }
 }
-function saveNotifications() {
-    localStorage.setItem('notificationsDB', JSON.stringify(notificationsDB));
-}
-loadNotifications();
 
-function loadData() {
-    const savedUsers = localStorage.getItem('usersDB');
-    if (savedUsers) {
-        usersDB = JSON.parse(savedUsers);
-        console.log("Loaded users from localStorage:", usersDB);
-    } else {
-        // Create default admin account
-        usersDB.admins.push({ 
-            email: "admin@school.edu", 
-            password: "admin123", 
-            name: "Professor Maria Santos" 
+// ============ DASHBOARD CHARTS ==========
+function createAttendancePieChart() {
+    const attendance = currentUser?.data?.attendance || {};
+    const present = attendance.present || 0;
+    const absent = attendance.absent || 0;
+    const tardy = attendance.tardy || 0;
+    
+    const ctx = document.getElementById('attendancePieChart')?.getContext('2d');
+    if (!ctx) return;
+    
+    if (attendanceChart) attendanceChart.destroy();
+    
+    if (present === 0 && absent === 0 && tardy === 0) {
+        attendanceChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: ['No Data'],
+                datasets: [{
+                    data: [1],
+                    backgroundColor: ['#e2e8f0'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { labels: { color: '#1e2a3e' } }
+                }
+            }
         });
-        console.log("Created default admin account");
+    } else {
+        attendanceChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: ['Present', 'Absent', 'Tardy'],
+                datasets: [{
+                    data: [present, absent, tardy],
+                    backgroundColor: ['#10B981', '#ef4444', '#F59E0B'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: '#1e2a3e', usePointStyle: true } },
+                    tooltip: { callbacks: { label: (context) => `${context.label}: ${context.raw} records` } }
+                }
+            }
+        });
+    }
+}
+
+function updateDashboardCharts() {
+    if (!currentUser || currentUser.type !== 'student') return;
+    
+    const grades = currentUser.data.grades || {};
+    const gradeCtx = document.getElementById('gradeBarChart')?.getContext('2d');
+    if (gradeCtx) {
+        if (gradeChart) gradeChart.destroy();
+        if (Object.keys(grades).length > 0) {
+            gradeChart = new Chart(gradeCtx, { 
+                type: 'bar', 
+                data: { 
+                    labels: Object.keys(grades), 
+                    datasets: [{ 
+                        label: 'Grade (%)', 
+                        data: Object.values(grades), 
+                        backgroundColor: 'rgba(255, 179, 71, 0.7)', 
+                        borderColor: '#FFB347', 
+                        borderWidth: 1 
+                    }] 
+                }, 
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: true, 
+                    scales: { y: { beginAtZero: true, max: 100 } } 
+                } 
+            });
+        } else {
+            gradeChart = new Chart(gradeCtx, { 
+                type: 'bar', 
+                data: { 
+                    labels: ['No Data'], 
+                    datasets: [{ 
+                        label: 'Grade (%)', 
+                        data: [0], 
+                        backgroundColor: '#e2e8f0' 
+                    }] 
+                }, 
+                options: { responsive: true } 
+            });
+        }
+    }
+    
+    createAttendancePieChart();
+}
+
+// ============ CURRICULUM DATA ==========
+const highSchoolCurriculum = {
+    "Grade 9": [
+        { name: "English 9", room: "RM 201", professor: "Prof. Maria Santos", category: "core", units: 1 },
+        { name: "Mathematics 9", room: "RM 202", professor: "Prof. Jose Rizal", category: "core", units: 1 },
+        { name: "Science 9", room: "LAB 101", professor: "Prof. Gregorio Y. Zara", category: "core", units: 1 },
+        { name: "Filipino 9", room: "RM 204", professor: "Prof. Virgilio Almario", category: "core", units: 1 },
+        { name: "Araling Panlipunan 9", room: "RM 203", professor: "Prof. Teodoro Agoncillo", category: "core", units: 1 },
+        { name: "MAPEH 9", room: "GYM 1", professor: "Prof. Francisca Aquino", category: "minor", units: 1 },
+        { name: "TLE 9", room: "WSHOP 1", professor: "Prof. Ramon Magsaysay", category: "minor", units: 1 },
+        { name: "Values Education 9", room: "RM 205", professor: "Prof. Carmen Perez", category: "core", units: 1 },
+        { name: "Research 9", room: "LIB 101", professor: "Prof. Fe Del Mundo", category: "minor", units: 1 }
+    ],
+    "Grade 10": [
+        { name: "English 10", room: "RM 206", professor: "Prof. Maria Santos", category: "core", units: 1 },
+        { name: "Mathematics 10", room: "RM 207", professor: "Prof. Jose Rizal", category: "core", units: 1 },
+        { name: "Science 10", room: "LAB 102", professor: "Prof. Gregorio Y. Zara", category: "core", units: 1 },
+        { name: "Filipino 10", room: "RM 209", professor: "Prof. Virgilio Almario", category: "core", units: 1 },
+        { name: "Araling Panlipunan 10", room: "RM 208", professor: "Prof. Teodoro Agoncillo", category: "core", units: 1 },
+        { name: "MAPEH 10", room: "GYM 1", professor: "Prof. Francisca Aquino", category: "minor", units: 1 },
+        { name: "Research 10", room: "LIB 101", professor: "Prof. Fe Del Mundo", category: "minor", units: 1 },
+        { name: "Values Education 10", room: "RM 210", professor: "Prof. Carmen Perez", category: "core", units: 1 },
+        { name: "Career Guidance", room: "RM 211", professor: "Prof. Maria Santos", category: "minor", units: 1 }
+    ]
+};
+
+const seniorHighStrandSubjects = {
+    "STEM": {
+        "Grade 11": [
+            { name: "Pre-Calculus", room: "RM 301", professor: "Prof. Robert Reyes", category: "core", units: 1 },
+            { name: "General Biology 1", room: "LAB 201", professor: "Prof. Gregorio Y. Zara", category: "core", units: 1 },
+            { name: "General Chemistry 1", room: "LAB 203", professor: "Prof. Paulo Campos", category: "core", units: 1 },
+            { name: "Earth Science", room: "LAB 205", professor: "Prof. Gregorio Y. Zara", category: "core", units: 1 },
+            { name: "Oral Communication", room: "RM 302", professor: "Prof. Maria Santos", category: "core", units: 1 },
+            { name: "Reading & Writing", room: "RM 303", professor: "Prof. Jose Rizal", category: "core", units: 1 }
+        ],
+        "Grade 12": [
+            { name: "Basic Calculus", room: "RM 305", professor: "Prof. Robert Reyes", category: "core", units: 1 },
+            { name: "General Physics 2", room: "PHY LAB 202", professor: "Prof. William Ong", category: "core", units: 1 },
+            { name: "Research Project", room: "LIB 201", professor: "Prof. Fe Del Mundo", category: "research", units: 1 },
+            { name: "Entrepreneurship", room: "RM 306", professor: "Prof. Mark Rivera", category: "core", units: 1 },
+            { name: "Media & Information Literacy", room: "RM 307", professor: "Prof. Maria Santos", category: "core", units: 1 },
+            { name: "Work Immersion", room: "OFFSITE", professor: "Industry Supervisor", category: "practicum", units: 2 }
+        ]
+    },
+    "ABM": {
+        "Grade 11": [
+            { name: "Business Mathematics", room: "RM 311", professor: "Prof. Mark Rivera", category: "core", units: 1 },
+            { name: "Organization & Management", room: "RM 312", professor: "Prof. Socorro Ramos", category: "core", units: 1 },
+            { name: "Principles of Marketing", room: "RM 313", professor: "Prof. Christine Flores", category: "core", units: 1 },
+            { name: "Fundamentals of ABM 1", room: "RM 314", professor: "Prof. Mark Rivera", category: "core", units: 1 },
+            { name: "Oral Communication", room: "RM 315", professor: "Prof. Maria Santos", category: "core", units: 1 },
+            { name: "Reading & Writing", room: "RM 316", professor: "Prof. Jose Rizal", category: "core", units: 1 }
+        ],
+        "Grade 12": [
+            { name: "Business Finance", room: "RM 317", professor: "Prof. Christine Flores", category: "core", units: 1 },
+            { name: "Applied Economics", room: "RM 318", professor: "Prof. Mark Rivera", category: "core", units: 1 },
+            { name: "Research Project", room: "LIB 201", professor: "Prof. Fe Del Mundo", category: "research", units: 1 },
+            { name: "Entrepreneurship", room: "RM 322", professor: "Prof. Mark Rivera", category: "core", units: 1 },
+            { name: "Work Immersion", room: "OFFSITE", professor: "Industry Supervisor", category: "practicum", units: 2 }
+        ]
+    },
+    "HUMMS": {
+        "Grade 11": [
+            { name: "Introduction to World Religions", room: "RM 331", professor: "Prof. Nick Joaquin", category: "core", units: 1 },
+            { name: "Creative Writing", room: "RM 332", professor: "Prof. Lualhati Bautista", category: "core", units: 1 },
+            { name: "Philippine Politics", room: "RM 333", professor: "Prof. F. Sionil Jose", category: "core", units: 1 },
+            { name: "Oral Communication", room: "RM 334", professor: "Prof. Maria Santos", category: "core", units: 1 },
+            { name: "Reading & Writing", room: "RM 335", professor: "Prof. Jose Rizal", category: "core", units: 1 }
+        ],
+        "Grade 12": [
+            { name: "Introduction to Philosophy", room: "RM 336", professor: "Prof. Nick Joaquin", category: "core", units: 1 },
+            { name: "Community Engagement", room: "RM 339", professor: "Prof. Teodoro Agoncillo", category: "core", units: 1 },
+            { name: "Research Project", room: "LIB 201", professor: "Prof. Fe Del Mundo", category: "research", units: 1 },
+            { name: "Media & Information Literacy", room: "RM 341", professor: "Prof. Maria Santos", category: "core", units: 1 },
+            { name: "Work Immersion", room: "OFFSITE", professor: "Industry Supervisor", category: "practicum", units: 2 }
+        ]
+    },
+    "GAS": {
+        "Grade 11": [
+            { name: "Academic Elective 1", room: "RM 351", professor: "Prof. Maria Santos", category: "elective", units: 1 },
+            { name: "Academic Elective 2", room: "RM 352", professor: "Prof. Jose Rizal", category: "elective", units: 1 },
+            { name: "Oral Communication", room: "RM 353", professor: "Prof. Maria Santos", category: "core", units: 1 },
+            { name: "Reading & Writing", room: "RM 354", professor: "Prof. Jose Rizal", category: "core", units: 1 }
+        ],
+        "Grade 12": [
+            { name: "Statistics & Probability", room: "RM 355", professor: "Prof. Robert Reyes", category: "core", units: 1 },
+            { name: "Research Project", room: "LIB 201", professor: "Prof. Fe Del Mundo", category: "research", units: 1 },
+            { name: "Entrepreneurship", room: "RM 358", professor: "Prof. Mark Rivera", category: "core", units: 1 },
+            { name: "Work Immersion", room: "OFFSITE", professor: "Industry Supervisor", category: "practicum", units: 2 }
+        ]
+    }
+};
+
+// Each year contains exactly 14 subjects, sourced from common CHED-aligned
+// curricula for these Philippine programs. Subject ORDER controls term
+// distribution: filterSubjectsByTerm() slices the array for whichever term
+// (Semester, Tri-Semester, Quarter, Block Plan) the student picks.
+const collegeCurriculum = {
+    "Bachelor of Science in Information Technology": {
+        "1st Year": [
+            { name: "Introduction to Computing", room: "IT LAB 101", professor: "Prof. James Dela Cruz", category: "major", units: 3 },
+            { name: "Computer Programming 1", room: "IT LAB 101", professor: "Prof. Michael Santos", category: "major", units: 3 },
+            { name: "Mathematics in the Modern World", room: "RM 401", professor: "Prof. Jose Rizal", category: "ge", units: 3 },
+            { name: "Purposive Communication", room: "RM 402", professor: "Prof. Maria Santos", category: "ge", units: 3 },
+            { name: "Understanding the Self", room: "RM 403", professor: "Prof. Carmen Perez", category: "ge", units: 3 },
+            { name: "PE 1 - Movement Enhancement", room: "GYM 1", professor: "Prof. Francisca Aquino", category: "ge", units: 2 },
+            { name: "NSTP 1 - CWTS", room: "RM 405", professor: "Prof. Carmen Perez", category: "ge", units: 3 },
+            { name: "Computer Programming 2", room: "IT LAB 102", professor: "Prof. Michael Santos", category: "major", units: 3 },
+            { name: "Discrete Mathematics", room: "RM 406", professor: "Prof. Jose Rizal", category: "major", units: 3 },
+            { name: "Web Systems and Technologies 1", room: "IT LAB 103", professor: "Prof. James Dela Cruz", category: "major", units: 3 },
+            { name: "Readings in Philippine History", room: "RM 408", professor: "Prof. Teodoro Agoncillo", category: "ge", units: 3 },
+            { name: "Art Appreciation", room: "RM 412", professor: "Prof. Carmen Perez", category: "ge", units: 3 },
+            { name: "PE 2 - Rhythmic Activities", room: "GYM 1", professor: "Prof. Francisca Aquino", category: "ge", units: 2 },
+            { name: "NSTP 2 - CWTS", room: "RM 405", professor: "Prof. Carmen Perez", category: "ge", units: 3 }
+        ],
+        "2nd Year": [
+            { name: "Object-Oriented Programming", room: "IT LAB 201", professor: "Prof. Daniel Tan", category: "major", units: 3 },
+            { name: "Data Structures and Algorithms", room: "IT LAB 202", professor: "Prof. Jennifer Cruz", category: "major", units: 3 },
+            { name: "Database Management Systems", room: "IT LAB 203", professor: "Prof. Angela Martinez", category: "major", units: 3 },
+            { name: "Computer Architecture and Organization", room: "IT LAB 204", professor: "Prof. Christopher Lee", category: "major", units: 3 },
+            { name: "Networking 1", room: "NET LAB 301", professor: "Prof. Christopher Lee", category: "major", units: 3 },
+            { name: "Quantitative Methods", room: "RM 414", professor: "Prof. Robert Reyes", category: "major", units: 3 },
+            { name: "The Contemporary World", room: "RM 407", professor: "Prof. Teodoro Agoncillo", category: "ge", units: 3 },
+            { name: "Web Systems and Technologies 2", room: "IT LAB 205", professor: "Prof. James Dela Cruz", category: "major", units: 3 },
+            { name: "Information Management", room: "IT LAB 206", professor: "Prof. Angela Martinez", category: "major", units: 3 },
+            { name: "Human-Computer Interaction", room: "IT LAB 207", professor: "Prof. Jennifer Cruz", category: "major", units: 3 },
+            { name: "Science, Technology and Society", room: "RM 415", professor: "Prof. Carmen Perez", category: "ge", units: 3 },
+            { name: "Ethics", room: "RM 416", professor: "Prof. Nick Joaquin", category: "ge", units: 3 },
+            { name: "PE 3 - Team Sports", room: "GYM 1", professor: "Prof. Francisca Aquino", category: "ge", units: 2 },
+            { name: "Life and Works of Rizal", room: "RM 409", professor: "Prof. Jose Rizal", category: "ge", units: 3 }
+        ],
+        "3rd Year": [
+            { name: "Software Engineering 1", room: "IT LAB 301", professor: "Prof. Daniel Tan", category: "major", units: 3 },
+            { name: "Information Assurance and Security 1", room: "IT LAB 302", professor: "Prof. Christopher Lee", category: "major", units: 3 },
+            { name: "Operating Systems", room: "IT LAB 303", professor: "Prof. Christopher Lee", category: "major", units: 3 },
+            { name: "Networking 2", room: "NET LAB 302", professor: "Prof. Christopher Lee", category: "major", units: 3 },
+            { name: "Mobile Application Development", room: "IT LAB 304", professor: "Prof. Daniel Tan", category: "major", units: 3 },
+            { name: "Quantitative Research Methods", room: "RM 417", professor: "Prof. Fe Del Mundo", category: "research", units: 3 },
+            { name: "Technical Writing", room: "RM 418", professor: "Prof. Maria Santos", category: "ge", units: 3 },
+            { name: "Software Engineering 2", room: "IT LAB 305", professor: "Prof. Daniel Tan", category: "major", units: 3 },
+            { name: "Information Assurance and Security 2", room: "IT LAB 306", professor: "Prof. Christopher Lee", category: "major", units: 3 },
+            { name: "Systems Integration and Architecture", room: "IT LAB 307", professor: "Prof. James Dela Cruz", category: "major", units: 3 },
+            { name: "Application Development and Emerging Tech", room: "IT LAB 308", professor: "Prof. Daniel Tan", category: "major", units: 3 },
+            { name: "Multimedia Systems", room: "IT LAB 309", professor: "Prof. Jennifer Cruz", category: "major", units: 3 },
+            { name: "IT Project Management", room: "IT LAB 310", professor: "Prof. James Dela Cruz", category: "major", units: 3 },
+            { name: "IT Elective 1 - Cloud Computing", room: "IT LAB 311", professor: "Prof. Daniel Tan", category: "elective", units: 3 }
+        ],
+        "4th Year": [
+            { name: "Capstone Project 1", room: "IT LAB 401", professor: "Prof. James Dela Cruz", category: "research", units: 3 },
+            { name: "Professional Ethics in IT", room: "IT LAB 402", professor: "Prof. Carmen Perez", category: "major", units: 3 },
+            { name: "IT Elective 2 - DevOps Engineering", room: "IT LAB 403", professor: "Prof. Daniel Tan", category: "elective", units: 3 },
+            { name: "Cybersecurity Fundamentals", room: "IT LAB 404", professor: "Prof. Christopher Lee", category: "major", units: 3 },
+            { name: "Enterprise Architecture", room: "IT LAB 405", professor: "Prof. James Dela Cruz", category: "major", units: 3 },
+            { name: "IT Service Management", room: "IT LAB 406", professor: "Prof. Daniel Tan", category: "major", units: 3 },
+            { name: "Free Elective 1", room: "RM 419", professor: "Prof. Mark Rivera", category: "elective", units: 3 },
+            { name: "Capstone Project 2", room: "IT LAB 407", professor: "Prof. James Dela Cruz", category: "research", units: 3 },
+            { name: "IT Practicum / Internship (486 hrs)", room: "OFFSITE", professor: "Industry Supervisor", category: "practicum", units: 6 },
+            { name: "IT Elective 3 - Data Analytics", room: "IT LAB 408", professor: "Prof. Daniel Tan", category: "elective", units: 3 },
+            { name: "IT Elective 4 - AI Foundations", room: "IT LAB 409", professor: "Prof. Jennifer Cruz", category: "elective", units: 3 },
+            { name: "Emerging Technologies in IT", room: "IT LAB 410", professor: "Prof. Daniel Tan", category: "major", units: 3 },
+            { name: "Free Elective 2", room: "RM 420", professor: "Prof. Mark Rivera", category: "elective", units: 3 },
+            { name: "Industry Seminar", room: "AUD 1", professor: "Industry Supervisor", category: "major", units: 1 }
+        ]
+    },
+    "Bachelor of Science in Computer Science": {
+        "1st Year": [
+            { name: "Introduction to Computing", room: "CS LAB 101", professor: "Prof. James Dela Cruz", category: "major", units: 3 },
+            { name: "Fundamentals of Programming", room: "CS LAB 101", professor: "Prof. Michael Santos", category: "major", units: 3 },
+            { name: "Discrete Structures 1", room: "RM 401", professor: "Prof. Jose Rizal", category: "major", units: 3 },
+            { name: "Mathematics in the Modern World", room: "RM 402", professor: "Prof. Jose Rizal", category: "ge", units: 3 },
+            { name: "Purposive Communication", room: "RM 403", professor: "Prof. Maria Santos", category: "ge", units: 3 },
+            { name: "PE 1 - Movement Enhancement", room: "GYM 1", professor: "Prof. Francisca Aquino", category: "ge", units: 2 },
+            { name: "NSTP 1 - CWTS", room: "RM 405", professor: "Prof. Carmen Perez", category: "ge", units: 3 },
+            { name: "Intermediate Programming", room: "CS LAB 102", professor: "Prof. Michael Santos", category: "major", units: 3 },
+            { name: "Discrete Structures 2", room: "RM 404", professor: "Prof. Jose Rizal", category: "major", units: 3 },
+            { name: "Calculus 1", room: "RM 411", professor: "Prof. Robert Reyes", category: "major", units: 3 },
+            { name: "Understanding the Self", room: "RM 406", professor: "Prof. Carmen Perez", category: "ge", units: 3 },
+            { name: "Readings in Philippine History", room: "RM 408", professor: "Prof. Teodoro Agoncillo", category: "ge", units: 3 },
+            { name: "PE 2 - Rhythmic Activities", room: "GYM 1", professor: "Prof. Francisca Aquino", category: "ge", units: 2 },
+            { name: "NSTP 2 - CWTS", room: "RM 405", professor: "Prof. Carmen Perez", category: "ge", units: 3 }
+        ],
+        "2nd Year": [
+            { name: "Object-Oriented Programming", room: "CS LAB 201", professor: "Prof. Daniel Tan", category: "major", units: 3 },
+            { name: "Data Structures and Algorithms", room: "CS LAB 202", professor: "Prof. Jennifer Cruz", category: "major", units: 3 },
+            { name: "Logic Design and Digital Computer Circuits", room: "CS LAB 203", professor: "Prof. Christopher Lee", category: "major", units: 3 },
+            { name: "Database Systems", room: "CS LAB 204", professor: "Prof. Angela Martinez", category: "major", units: 3 },
+            { name: "Calculus 2", room: "RM 412", professor: "Prof. Robert Reyes", category: "major", units: 3 },
+            { name: "The Contemporary World", room: "RM 407", professor: "Prof. Teodoro Agoncillo", category: "ge", units: 3 },
+            { name: "Art Appreciation", room: "RM 413", professor: "Prof. Carmen Perez", category: "ge", units: 3 },
+            { name: "Architecture and Organization", room: "CS LAB 205", professor: "Prof. Christopher Lee", category: "major", units: 3 },
+            { name: "Information Management", room: "CS LAB 206", professor: "Prof. Angela Martinez", category: "major", units: 3 },
+            { name: "Networks and Communications", room: "NET LAB 301", professor: "Prof. Christopher Lee", category: "major", units: 3 },
+            { name: "Linear Algebra", room: "RM 414", professor: "Prof. Robert Reyes", category: "major", units: 3 },
+            { name: "Ethics", room: "RM 416", professor: "Prof. Nick Joaquin", category: "ge", units: 3 },
+            { name: "Science, Technology and Society", room: "RM 415", professor: "Prof. Carmen Perez", category: "ge", units: 3 },
+            { name: "PE 3 - Team Sports", room: "GYM 1", professor: "Prof. Francisca Aquino", category: "ge", units: 2 }
+        ],
+        "3rd Year": [
+            { name: "Operating Systems", room: "CS LAB 301", professor: "Prof. Christopher Lee", category: "major", units: 3 },
+            { name: "Software Engineering 1", room: "CS LAB 302", professor: "Prof. James Dela Cruz", category: "major", units: 3 },
+            { name: "Automata Theory and Formal Languages", room: "CS LAB 303", professor: "Prof. Jennifer Cruz", category: "major", units: 3 },
+            { name: "Algorithms and Complexity", room: "CS LAB 304", professor: "Prof. Jennifer Cruz", category: "major", units: 3 },
+            { name: "Programming Languages", room: "CS LAB 305", professor: "Prof. Daniel Tan", category: "major", units: 3 },
+            { name: "Probability and Statistics", room: "RM 417", professor: "Prof. Robert Reyes", category: "major", units: 3 },
+            { name: "Life and Works of Rizal", room: "RM 409", professor: "Prof. Jose Rizal", category: "ge", units: 3 },
+            { name: "Software Engineering 2", room: "CS LAB 306", professor: "Prof. James Dela Cruz", category: "major", units: 3 },
+            { name: "Artificial Intelligence", room: "CS LAB 307", professor: "Prof. Jennifer Cruz", category: "major", units: 3 },
+            { name: "Human-Computer Interaction", room: "CS LAB 308", professor: "Prof. Jennifer Cruz", category: "major", units: 3 },
+            { name: "Numerical and Symbolic Computation", room: "CS LAB 309", professor: "Prof. Robert Reyes", category: "major", units: 3 },
+            { name: "Research Methods in Computing", room: "LIB 301", professor: "Prof. Fe Del Mundo", category: "research", units: 3 },
+            { name: "CS Elective 1 - Web Engineering", room: "CS LAB 310", professor: "Prof. Daniel Tan", category: "elective", units: 3 },
+            { name: "CS Elective 2 - Game Programming", room: "CS LAB 311", professor: "Prof. Jennifer Cruz", category: "elective", units: 3 }
+        ],
+        "4th Year": [
+            { name: "Thesis Writing 1", room: "LIB 303", professor: "Prof. Fe Del Mundo", category: "research", units: 3 },
+            { name: "Professional Ethics in CS", room: "CS LAB 401", professor: "Prof. Carmen Perez", category: "major", units: 3 },
+            { name: "CS Elective 3 - Distributed Systems", room: "CS LAB 402", professor: "Prof. Christopher Lee", category: "elective", units: 3 },
+            { name: "CS Elective 4 - Machine Learning", room: "CS LAB 403", professor: "Prof. Jennifer Cruz", category: "elective", units: 3 },
+            { name: "Compiler Design", room: "CS LAB 404", professor: "Prof. Daniel Tan", category: "major", units: 3 },
+            { name: "Information Assurance and Security", room: "CS LAB 405", professor: "Prof. Christopher Lee", category: "major", units: 3 },
+            { name: "Free Elective 1", room: "RM 419", professor: "Prof. Mark Rivera", category: "elective", units: 3 },
+            { name: "Thesis Writing 2", room: "LIB 304", professor: "Prof. Fe Del Mundo", category: "research", units: 3 },
+            { name: "CS Practicum / Internship (200 hrs)", room: "OFFSITE", professor: "Industry Supervisor", category: "practicum", units: 6 },
+            { name: "CS Elective 5 - Computer Graphics", room: "CS LAB 406", professor: "Prof. Jennifer Cruz", category: "elective", units: 3 },
+            { name: "CS Elective 6 - Cloud and Parallel Computing", room: "CS LAB 407", professor: "Prof. Christopher Lee", category: "elective", units: 3 },
+            { name: "Free Elective 2", room: "RM 420", professor: "Prof. Mark Rivera", category: "elective", units: 3 },
+            { name: "CS Industry Seminar", room: "AUD 1", professor: "Industry Supervisor", category: "major", units: 1 },
+            { name: "Capstone Defense", room: "AUD 2", professor: "Prof. Fe Del Mundo", category: "research", units: 1 }
+        ]
+    },
+    "Bachelor of Science in Tourism Management": {
+        "1st Year": [
+            { name: "Introduction to Tourism and Hospitality", room: "TOUR 101", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "Macro Perspective of Tourism and Hospitality", room: "TOUR 102", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "Principles of Management", room: "TOUR 103", professor: "Prof. Mark Rivera", category: "major", units: 3 },
+            { name: "Microeconomics with Land Reform & Taxation", room: "RM 410", professor: "Prof. Mark Rivera", category: "ge", units: 3 },
+            { name: "Mathematics in the Modern World", room: "RM 401", professor: "Prof. Jose Rizal", category: "ge", units: 3 },
+            { name: "Purposive Communication", room: "RM 402", professor: "Prof. Maria Santos", category: "ge", units: 3 },
+            { name: "Understanding the Self", room: "RM 403", professor: "Prof. Carmen Perez", category: "ge", units: 3 },
+            { name: "PE 1 - Movement Enhancement", room: "GYM 1", professor: "Prof. Francisca Aquino", category: "ge", units: 2 },
+            { name: "NSTP 1 - CWTS", room: "RM 405", professor: "Prof. Carmen Perez", category: "ge", units: 3 },
+            { name: "Quality Service Management in Tourism", room: "TOUR 104", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "Risk Management as Applied to Safety & Security", room: "TOUR 105", professor: "Prof. Mark Rivera", category: "major", units: 3 },
+            { name: "Readings in Philippine History", room: "RM 408", professor: "Prof. Teodoro Agoncillo", category: "ge", units: 3 },
+            { name: "PE 2 - Rhythmic Activities", room: "GYM 1", professor: "Prof. Francisca Aquino", category: "ge", units: 2 },
+            { name: "NSTP 2 - CWTS", room: "RM 405", professor: "Prof. Carmen Perez", category: "ge", units: 3 }
+        ],
+        "2nd Year": [
+            { name: "Tourism and Hospitality Marketing", room: "TOUR 201", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "Philippine Culture and Tourism Geography", room: "TOUR 202", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "Multicultural Diversity in the Workplace", room: "TOUR 203", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "Sustainable Tourism", room: "TOUR 204", professor: "Prof. Mark Rivera", category: "major", units: 3 },
+            { name: "Legal Aspects in Tourism and Hospitality", room: "TOUR 205", professor: "Prof. Mark Rivera", category: "major", units: 3 },
+            { name: "The Contemporary World", room: "RM 407", professor: "Prof. Teodoro Agoncillo", category: "ge", units: 3 },
+            { name: "Art Appreciation", room: "RM 413", professor: "Prof. Carmen Perez", category: "ge", units: 3 },
+            { name: "World Tourism Geography", room: "TOUR 206", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "Tourism and Hospitality Research 1", room: "TOUR 207", professor: "Prof. Fe Del Mundo", category: "research", units: 3 },
+            { name: "Macroeconomics", room: "RM 411", professor: "Prof. Mark Rivera", category: "major", units: 3 },
+            { name: "Filipino sa Iba't Ibang Disiplina", room: "RM 421", professor: "Prof. Virgilio Almario", category: "ge", units: 3 },
+            { name: "Ethics", room: "RM 416", professor: "Prof. Nick Joaquin", category: "ge", units: 3 },
+            { name: "Science, Technology and Society", room: "RM 415", professor: "Prof. Carmen Perez", category: "ge", units: 3 },
+            { name: "PE 3 - Team Sports", room: "GYM 1", professor: "Prof. Francisca Aquino", category: "ge", units: 2 }
+        ],
+        "3rd Year": [
+            { name: "Tour Operations Management", room: "TOUR 301", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "Travel Agency Operations", room: "TOUR 302", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "MICE Management (Meetings, Incentives, Conventions, Events)", room: "TOUR 303", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "Transportation Management", room: "TOUR 304", professor: "Prof. Mark Rivera", category: "major", units: 3 },
+            { name: "Front Office Management", room: "TOUR 305", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "Tourism and Hospitality Research 2", room: "TOUR 306", professor: "Prof. Fe Del Mundo", category: "research", units: 3 },
+            { name: "Life and Works of Rizal", room: "RM 409", professor: "Prof. Jose Rizal", category: "ge", units: 3 },
+            { name: "Cruise Line Operations and Management", room: "TOUR 307", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "Sustainable and Ecotourism", room: "TOUR 308", professor: "Prof. Mark Rivera", category: "major", units: 3 },
+            { name: "Tourism Policy Planning and Development", room: "TOUR 309", professor: "Prof. Mark Rivera", category: "major", units: 3 },
+            { name: "Tourism Information Systems", room: "TOUR 310", professor: "Prof. James Dela Cruz", category: "major", units: 3 },
+            { name: "Foreign Language - Mandarin Basics", room: "TOUR 311", professor: "Prof. Maria Santos", category: "elective", units: 3 },
+            { name: "Tourism Elective 1 - Heritage Tourism", room: "TOUR 312", professor: "Prof. Christine Flores", category: "elective", units: 3 },
+            { name: "Tourism Elective 2 - Rural and Farm Tourism", room: "TOUR 313", professor: "Prof. Mark Rivera", category: "elective", units: 3 }
+        ],
+        "4th Year": [
+            { name: "Strategic Management for Tourism", room: "TOUR 401", professor: "Prof. Mark Rivera", category: "major", units: 3 },
+            { name: "Tourism Entrepreneurship", room: "TOUR 402", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "Capstone Project 1", room: "LIB 401", professor: "Prof. Fe Del Mundo", category: "research", units: 3 },
+            { name: "International Tourism and Hospitality", room: "TOUR 403", professor: "Prof. Christine Flores", category: "major", units: 3 },
+            { name: "Tourism Elective 3 - Cultural Tourism", room: "TOUR 404", professor: "Prof. Christine Flores", category: "elective", units: 3 },
+            { name: "Tourism Elective 4 - Wellness Tourism", room: "TOUR 405", professor: "Prof. Mark Rivera", category: "elective", units: 3 },
+            { name: "Free Elective 1", room: "RM 419", professor: "Prof. Mark Rivera", category: "elective", units: 3 },
+            { name: "Capstone Project 2", room: "LIB 402", professor: "Prof. Fe Del Mundo", category: "research", units: 3 },
+            { name: "Tourism Practicum / Internship (600 hrs)", room: "OFFSITE", professor: "Industry Supervisor", category: "practicum", units: 6 },
+            { name: "Foreign Language - Spanish Basics", room: "TOUR 406", professor: "Prof. Maria Santos", category: "elective", units: 3 },
+            { name: "Free Elective 2", room: "RM 420", professor: "Prof. Mark Rivera", category: "elective", units: 3 },
+            { name: "Tourism Industry Seminar", room: "AUD 1", professor: "Industry Supervisor", category: "major", units: 1 },
+            { name: "On-the-Job Training Briefing", room: "TOUR 407", professor: "Prof. Christine Flores", category: "major", units: 1 },
+            { name: "Professional Ethics in Tourism", room: "TOUR 408", professor: "Prof. Carmen Perez", category: "major", units: 3 }
+        ]
+    }
+};
+
+function getSubjectsForLevel(level, sublevel = null, strand = null, program = null, year = null) {
+    if (level === 'juniorHigh') {
+        return assignSchedulesToSubjects(highSchoolCurriculum[sublevel] || []);
+    } else if (level === 'seniorHigh') {
+        const gradeData = seniorHighStrandSubjects[strand]?.[sublevel];
+        return assignSchedulesToSubjects(gradeData || []);
+    } else if (level === 'college') {
+        const programData = collegeCurriculum[program]?.[year];
+        return assignSchedulesToSubjects(programData || []);
+    }
+    return [];
+}
+
+// ============ ACADEMIC TERM FILTER ==========
+// Distributes a year's subjects across the chosen term structure.
+// 14 subjects per year: Semester=7+7, Tri-Sem=5+5+4, Quarter=4+4+3+3, Block=7+7
+const TERM_DISTRIBUTIONS = {
+    'Semester': {
+        periods: ['1st Semester', '2nd Semester'],
+        sizes: [7, 7]
+    },
+    'Tri-Semester': {
+        periods: ['1st Tri-Semester', '2nd Tri-Semester', '3rd Tri-Semester'],
+        sizes: [5, 5, 4]
+    },
+    'Quarter': {
+        periods: ['1st Quarter', '2nd Quarter', '3rd Quarter', '4th Quarter'],
+        sizes: [4, 4, 3, 3]
+    },
+    'Block Plan': {
+        periods: ['Block A', 'Block B'],
+        sizes: [7, 7]
+    }
+};
+
+function filterSubjectsByTerm(subjects, termType, termPeriod) {
+    if (!subjects || subjects.length === 0) return subjects;
+    
+    const dist = TERM_DISTRIBUTIONS[termType] || TERM_DISTRIBUTIONS['Semester'];
+    const periodIndex = dist.periods.indexOf(termPeriod);
+    
+    // Junior High and other non-college pools just return the whole list.
+    if (subjects.length < 14 || periodIndex === -1) {
+        const termInfoDisplay = document.getElementById('termInfoDisplay');
+        if (termInfoDisplay) {
+            termInfoDisplay.innerHTML = `<small><i class="fas fa-info-circle"></i> ${termType} - ${termPeriod}: ${subjects.length} subjects available</small>`;
+        }
+        return subjects;
+    }
+    
+    let start = 0;
+    for (let i = 0; i < periodIndex; i++) start += dist.sizes[i];
+    const count = dist.sizes[periodIndex];
+    const filtered = subjects.slice(start, start + count);
+    
+    const termInfoDisplay = document.getElementById('termInfoDisplay');
+    if (termInfoDisplay) {
+        termInfoDisplay.innerHTML = `<small><i class="fas fa-info-circle"></i> ${termType} - ${termPeriod}: ${filtered.length} subjects this term (out of ${subjects.length} total for the year)</small>`;
+    }
+    
+    return filtered;
+}
+
+// ============ SELF-ENROLLMENT ==========
+function initSelfEnrollment() {
+    const enrollmentLevel = document.getElementById('enrollmentLevel');
+    if (enrollmentLevel) {
+        enrollmentLevel.addEventListener('change', function() {
+            const level = this.value;
+            const juniorHigh = document.getElementById('juniorHighOptions');
+            const seniorHigh = document.getElementById('seniorHighOptions');
+            const college = document.getElementById('collegeOptions');
+            const subjectsArea = document.getElementById('subjectsDisplayArea');
+            
+            if (juniorHigh) juniorHigh.style.display = level === 'juniorHigh' ? 'block' : 'none';
+            if (seniorHigh) seniorHigh.style.display = level === 'seniorHigh' ? 'block' : 'none';
+            if (college) college.style.display = level === 'college' ? 'block' : 'none';
+            if (subjectsArea) subjectsArea.style.display = 'none';
+            if (level) setTimeout(() => loadSubjectsForLevel(), 100);
+        });
+    }
+    
+    const juniorHighGrade = document.getElementById('juniorHighGrade');
+    const seniorHighGrade = document.getElementById('seniorHighGrade');
+    const seniorHighStrand = document.getElementById('seniorHighStrand');
+    const collegeProgram = document.getElementById('collegeProgramSelect');
+    const collegeYear = document.getElementById('collegeYearSelect');
+    
+    if (juniorHighGrade) juniorHighGrade.addEventListener('change', () => loadSubjectsForLevel());
+    if (seniorHighGrade) seniorHighGrade.addEventListener('change', () => loadSubjectsForLevel());
+    if (seniorHighStrand) seniorHighStrand.addEventListener('change', () => loadSubjectsForLevel());
+    if (collegeProgram) collegeProgram.addEventListener('change', () => loadSubjectsForLevel());
+    if (collegeYear) collegeYear.addEventListener('change', () => loadSubjectsForLevel());
+    
+    const academicTermSelect = document.getElementById('academicTermSelect');
+    if (academicTermSelect) {
+        academicTermSelect.addEventListener('change', function() {
+            const termType = this.value;
+            const termPeriodSelect = document.getElementById('termPeriodSelect');
+            if (!termPeriodSelect) return;
+            
+            let options = [];
+            if (termType === 'Semester') {
+                options = ['1st Semester', '2nd Semester'];
+            } else if (termType === 'Tri-Semester') {
+                options = ['1st Tri-Semester', '2nd Tri-Semester', '3rd Tri-Semester'];
+            } else if (termType === 'Quarter') {
+                options = ['1st Quarter', '2nd Quarter', '3rd Quarter', '4th Quarter'];
+            } else if (termType === 'Block Plan') {
+                options = ['Block A', 'Block B'];
+            }
+            
+            termPeriodSelect.innerHTML = options.map(opt => `<option value="${opt}">${opt}</option>`).join('');
+            
+            const enrollmentLevelVal = document.getElementById('enrollmentLevel');
+            if (enrollmentLevelVal && enrollmentLevelVal.value) {
+                loadSubjectsForLevel();
+            }
+        });
+    }
+
+    // Refresh subjects whenever the user picks a different term period
+    // (e.g. switching from "1st Semester" to "2nd Semester").
+    const termPeriodSelectInit = document.getElementById('termPeriodSelect');
+    if (termPeriodSelectInit) {
+        termPeriodSelectInit.addEventListener('change', function() {
+            const enrollmentLevelVal = document.getElementById('enrollmentLevel');
+            if (enrollmentLevelVal && enrollmentLevelVal.value) {
+                loadSubjectsForLevel();
+            }
+        });
+    }
+}
+
+function loadSubjectsForLevel() {
+    const level = document.getElementById('enrollmentLevel').value;
+    if (!level) { 
+        const subjectsArea = document.getElementById('subjectsDisplayArea');
+        if (subjectsArea) subjectsArea.style.display = 'none';
+        return; 
+    }
+    
+    const termType = document.getElementById('academicTermSelect')?.value || 'Semester';
+    const termPeriod = document.getElementById('termPeriodSelect')?.value || '1st Semester';
+    
+    let subjects = [];
+    let levelInfo = {};
+    
+    if (level === 'juniorHigh') {
+        const grade = document.getElementById('juniorHighGrade').value;
+        if (!grade) { showCustomNotification('Please select a grade level', 'warning'); return; }
+        subjects = getSubjectsForLevel('juniorHigh', grade);
+        levelInfo = { level, sublevel: grade };
+        customConsoleLog(`Loading Junior High subjects for ${grade}`, 'info');
+    } else if (level === 'seniorHigh') {
+        const grade = document.getElementById('seniorHighGrade').value;
+        const strand = document.getElementById('seniorHighStrand').value;
+        if (!grade || !strand) { showCustomNotification('Please select both grade and strand', 'warning'); return; }
+        subjects = getSubjectsForLevel('seniorHigh', grade, strand);
+        levelInfo = { level, sublevel: grade, strand: strand };
+        customConsoleLog(`Loading Senior High subjects for ${strand} - ${grade}`, 'info');
+    } else if (level === 'college') {
+        const program = document.getElementById('collegeProgramSelect').value;
+        const year = document.getElementById('collegeYearSelect').value;
+        if (!program || !year) { showCustomNotification('Please select both program and year level', 'warning'); return; }
+        subjects = getSubjectsForLevel('college', null, null, program, year);
+        levelInfo = { level, program, year };
+        customConsoleLog(`Loading College subjects for ${program} - ${year}`, 'info');
+    }
+    
+    if (!subjects || subjects.length === 0) {
+        showCustomNotification('No subjects found for the selected options', 'warning');
+        const subjectsArea = document.getElementById('subjectsDisplayArea');
+        if (subjectsArea) subjectsArea.style.display = 'none';
+        return;
+    }
+    
+    subjects = filterSubjectsByTerm(subjects, termType, termPeriod);
+    
+    pendingEnrollment = { subjects, levelInfo };
+    displayAvailableSubjects(subjects);
+    // Schedule canvas starts EMPTY; subjects only appear once the user
+    // ticks them in the list above.
+    renderScheduleTable([], 'previewScheduleTable');
+    
+    const subjectsArea = document.getElementById('subjectsDisplayArea');
+    if (subjectsArea) subjectsArea.style.display = 'block';
+    showCustomNotification(`Loaded ${subjects.length} subjects for ${termType} - ${termPeriod}. Select your courses then click "Confirm Schedule".`, 'success');
+}
+
+function displayAvailableSubjects(subjects) {
+    const container = document.getElementById('availableSubjectsList');
+    if (!container) return;
+    if (!subjects || subjects.length === 0) { 
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-book"></i><p>No subjects found.</p></div>'; 
+        return; 
+    }
+    let html = '';
+    subjects.forEach((subject, idx) => {
+        const unitsDisplay = subject.units ? `<small><i class="fas fa-hourglass-half"></i> ${subject.units} units</small>` : '';
+        html += `<div class="subject-card" data-subject-index="${idx}">
+                    <input type="checkbox" class="subject-checkbox" value="${subject.name.replace(/'/g, "\\'")}">
+                    <div class="subject-info">
+                        <strong>${escapeHtml(subject.name)}</strong>
+                        <div class="subject-details">
+                            <small><i class="fas fa-door-open"></i> ${escapeHtml(subject.room)}</small>
+                            <small><i class="fas fa-chalkboard-teacher"></i> ${escapeHtml(subject.professor)}</small>
+                            <small><i class="fas fa-tag"></i> ${subject.category.toUpperCase()}</small>
+                            <small><i class="fas fa-calendar-week"></i> ${escapeHtml(subject.schedule || 'Schedule TBD')}</small>
+                            ${unitsDisplay}
+                        </div>
+                    </div>
+                </div>`;
+    });
+    container.innerHTML = html;
+    
+    document.querySelectorAll('.subject-card').forEach(card => {
+        const cb = card.querySelector('.subject-checkbox');
+        card.addEventListener('click', (e) => {
+            if (e.target !== cb) { 
+                cb.checked = !cb.checked; 
+                card.classList.toggle('selected', cb.checked); 
+                refreshPreviewScheduleFromTicks();
+            }
+        });
+        if (cb) {
+            cb.addEventListener('change', () => {
+                card.classList.toggle('selected', cb.checked);
+                refreshPreviewScheduleFromTicks();
+            });
+        }
+    });
+}
+
+// Read the currently-ticked subject cards and re-render the schedule
+// canvas with ONLY those subjects. The canvas is empty until at least
+// one subject is ticked.
+function refreshPreviewScheduleFromTicks() {
+    const all = (pendingEnrollment && pendingEnrollment.subjects) || [];
+    const cards = document.querySelectorAll('#availableSubjectsList .subject-card');
+    const picked = [];
+    cards.forEach(card => {
+        const cb = card.querySelector('.subject-checkbox');
+        if (cb && cb.checked) {
+            const idx = parseInt(card.getAttribute('data-subject-index'), 10);
+            if (!isNaN(idx) && all[idx]) picked.push(all[idx]);
+        }
+    });
+    renderScheduleTable(picked, 'previewScheduleTable');
+}
+
+// ============ CONFIRM SCHEDULE FUNCTION ==========
+function confirmSchedule() {
+    if (!pendingEnrollment) { 
+        showCustomNotification('Please select your education level and subjects first', 'warning'); 
+        return; 
+    }
+    
+    const selectedCheckboxes = document.querySelectorAll('.subject-checkbox:checked');
+    if (selectedCheckboxes.length === 0) { 
+        showCustomNotification('Please select at least one subject to enroll', 'warning'); 
+        return; 
+    }
+    
+    const selectedSubjectNames = Array.from(selectedCheckboxes).map(cb => cb.value);
+    const selectedSubjects = pendingEnrollment.subjects.filter(s => selectedSubjectNames.includes(s.name));
+    
+    const termType = document.getElementById('academicTermSelect')?.value || 'Semester';
+    const termPeriod = document.getElementById('termPeriodSelect')?.value || '1st Semester';
+    
+    if (currentUser && currentUser.type === 'student') {
+        currentUser.data.level = pendingEnrollment.levelInfo.level;
+        currentUser.data.sublevel = pendingEnrollment.levelInfo.sublevel;
+        currentUser.data.strand = pendingEnrollment.levelInfo.strand;
+        currentUser.data.program = pendingEnrollment.levelInfo.program;
+        currentUser.data.yearLevel = pendingEnrollment.levelInfo.year;
+        currentUser.data.enrolledSubjects = selectedSubjects;
+        currentUser.data.scheduleConfirmed = true;
+        currentUser.data.termType = termType;
+        currentUser.data.termPeriod = termPeriod;
+        
+        const idx = usersDB.students.findIndex(s => s.id === currentUser.data.id);
+        if (idx !== -1) {
+            usersDB.students[idx] = JSON.parse(JSON.stringify(currentUser.data));
+        }
         saveData();
+        
+        unlockScheduleGenerator();
+        
+        customConsoleLog(`Schedule confirmed with ${selectedSubjects.length} subjects`, 'success');
+        showCustomNotification(`✅ Successfully enrolled in ${selectedSubjects.length} subjects!`, 'success');
+        
+        switchContent('student-registration');
+        updateRegistrationForm();
     }
 }
-function saveData() { 
-    localStorage.setItem('usersDB', JSON.stringify(usersDB));
-    console.log("Saved users to localStorage:", usersDB);
-}
-loadData();
 
-// Navigation
-const loginPanel = document.getElementById('login-panel');
-const dashboardContent = document.getElementById('dashboard-content');
-const registrationContent = document.getElementById('student-registration-content');
-const selfEnrollmentContent = document.getElementById('self-enrollment-content');
-const recordsContent = document.getElementById('student-records-content');
-const navLinks = document.querySelectorAll('.sidebar nav ul li a');
-
-function switchContent(action) {
-    const panels = {
-        dashboard: dashboardContent, 'student-registration': registrationContent,
-        'self-enrollment': selfEnrollmentContent, 'student-records': recordsContent,
-        updates: document.getElementById('updates-content'), 'sched-gen-1': document.getElementById('sched-gen-1-content')
-    };
-    Object.values(panels).forEach(panel => { if (panel) panel.classList.remove('active'); });
-    if (panels[action]) panels[action].classList.add('active');
-    navLinks.forEach(link => {
-        link.classList.remove('active');
-        if (link.getAttribute('data-action') === action) link.classList.add('active');
-    });
-    if (action === 'dashboard') updateDashboard();
-    if (action === 'self-enrollment') {
-        loadAvailableSubjects();
-        setupSubjectTabsAndSearch();
+// ============ HELPER: PICK ACTIVE SUBJECTS FOR SCHED GEN ==========
+// Returns confirmed enrolledSubjects when present; otherwise falls back to
+// the user's current selection (checked boxes) or the full preview list,
+// so "Modify Schedule" works before the user has confirmed enrollment.
+function getActiveScheduleSubjects() {
+    if (currentUser && currentUser.data && Array.isArray(currentUser.data.enrolledSubjects) && currentUser.data.enrolledSubjects.length > 0) {
+        return currentUser.data.enrolledSubjects;
     }
-    if (action === 'updates') loadNotificationsView();
-    if (action === 'sched-gen-1') updateEnrolledSubjectsPreview();
-    updatePageTitleAndHeader(action);
+    if (typeof pendingEnrollment !== 'undefined' && pendingEnrollment && Array.isArray(pendingEnrollment.subjects) && pendingEnrollment.subjects.length > 0) {
+        const checked = document.querySelectorAll('.subject-checkbox:checked');
+        if (checked.length > 0) {
+            const checkedNames = new Set(Array.from(checked).map(cb => cb.value));
+            const filtered = pendingEnrollment.subjects.filter(s => checkedNames.has(s.name));
+            if (filtered.length > 0) return filtered;
+        }
+        return pendingEnrollment.subjects;
+    }
+    return [];
 }
 
-navLinks.forEach(link => {
-    link.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (!currentUser) { alert('Please login first.'); return; }
-        switchContent(link.getAttribute('data-action'));
-    });
-});
-
-// ============ FIXED ROLE TOGGLE FOR ADMIN LOGIN ============
-document.querySelectorAll('.role-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        // Remove active class from all role buttons
-        document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
-        // Add active class to clicked button
-        this.classList.add('active');
+// ============ MODIFY SCHEDULE FUNCTION - FIXED ==========
+function modifySchedule() {
+    console.log("=== MODIFY SCHEDULE CALLED ===");
+    
+    if (!currentUser) {
+        showCustomNotification('Please login first', 'warning');
+        return;
+    }
+    
+    const activeSubjects = getActiveScheduleSubjects();
+    if (!activeSubjects || activeSubjects.length === 0) {
+        showCustomNotification('Please select your level and subjects first.', 'warning');
+        switchContent('self-enrollment');
+        return;
+    }
+    
+    // Unlock schedule generator in sidebar
+    const schedGenLink = document.getElementById('schedGenNavItem');
+    if (schedGenLink) {
+        const link = schedGenLink.querySelector('a');
+        if (link) {
+            link.style.opacity = '1';
+            link.style.pointerEvents = 'auto';
+            const span = link.querySelector('span');
+            if (span) span.textContent = 'Sched. Gen.';
+        }
+    }
+    
+    // Switch to schedule generator page
+    switchContent('sched-gen-1');
+    
+    // Small delay to ensure DOM is ready
+    setTimeout(function() {
+        const enrolledSubjects = activeSubjects;
+        console.log("Enrolled subjects count:", enrolledSubjects.length);
         
-        const role = this.getAttribute('data-role');
-        
-        // Hide both login panels first
-        document.getElementById('student-login-panel').classList.remove('active-panel');
-        document.getElementById('admin-login-panel').classList.remove('active-panel');
-        
-        // Show the selected panel
-        if (role === 'student') {
-            document.getElementById('student-login-panel').classList.add('active-panel');
-        } else if (role === 'admin') {
-            document.getElementById('admin-login-panel').classList.add('active-panel');
+        // Update preview badges
+        const preview = document.getElementById('enrolledSubjectsListPreview');
+        if (preview) {
+            preview.innerHTML = '';
+            enrolledSubjects.forEach(function(subject) {
+                const badge = document.createElement('span');
+                badge.className = 'enrolled-preview-badge';
+                badge.innerHTML = escapeHtml(subject.name);
+                preview.appendChild(badge);
+            });
+            console.log("Preview updated with", enrolledSubjects.length, "badges");
+        } else {
+            console.error("Preview container not found!");
         }
         
-        // Also hide any open signup forms
-        const signupForm = document.getElementById('signup-form');
-        const adminSignupForm = document.getElementById('admin-signup-form');
-        if (signupForm) signupForm.style.display = 'none';
-        if (adminSignupForm) adminSignupForm.style.display = 'none';
+        // Render schedule table
+        renderScheduleTable(enrolledSubjects, 'scheduleResult');
+        
+        showCustomNotification('Schedule loaded successfully!', 'success');
+    }, 100);
+}
+
+// ============ REGISTRATION WIZARD ==========
+function updateRegistrationForm() {
+    if (!currentUser || currentUser.type !== 'student') return;
+    const fullName = document.getElementById('personalFullName');
+    const studentId = document.getElementById('schoolStudentId');
+    const program = document.getElementById('schoolProgram');
+    const yearLevel = document.getElementById('schoolYearLevel');
+    
+    if (fullName) fullName.value = currentUser.data.name;
+    if (studentId) studentId.value = currentUser.data.id;
+    if (program) program.value = currentUser.data.program || currentUser.data.strand || 'N/A';
+    if (yearLevel) yearLevel.value = currentUser.data.yearLevel || currentUser.data.sublevel || 'N/A';
+}
+
+let currentPhase = 1;
+function showPhase(phase) {
+    for (let i = 1; i <= 5; i++) { 
+        const el = document.getElementById(`wizard-phase-${i}`); 
+        if (el) el.classList.toggle('active-phase', i === phase); 
+    }
+    currentPhase = phase;
+    const steps = document.querySelectorAll('.wizard-step');
+    steps.forEach((step, idx) => { 
+        step.classList.remove('active', 'completed'); 
+        if (idx + 1 < phase) step.classList.add('completed'); 
+        if (idx + 1 === phase) step.classList.add('active'); 
+    });
+    if (phase === 5) generateRegistrationReceipt();
+}
+
+function generateRegistrationReceipt() {
+    const personal = registrationData.personal || {};
+    const schoolType = currentUser?.data?.level === 'juniorHigh' || currentUser?.data?.level === 'seniorHigh' ? 'High School' : 'College';
+    const schoolValue = currentUser?.data?.program || currentUser?.data?.strand || 'N/A';
+    const receiptHtml = `<div class="receipt-header"><h2>🎓 Official Registration Receipt</h2><p>Date: ${new Date().toLocaleString()}</p></div>
+        <div class="receipt-section"><h4>Student Information</h4><p><strong>ID:</strong> ${currentUser?.data?.id}</p><p><strong>Name:</strong> ${personal.fullName || currentUser?.data?.name}</p><p><strong>Contact:</strong> ${personal.contact || 'N/A'}</p><p><strong>Email:</strong> ${personal.email || 'N/A'}</p><p><strong>Address:</strong> ${personal.address || 'N/A'}</p></div>
+        <div class="receipt-section"><h4>Academic Information</h4><p><strong>Level:</strong> ${schoolType}</p><p><strong>Program/Strand:</strong> ${schoolValue}</p><p><strong>Year/Grade:</strong> ${currentUser?.data?.yearLevel || currentUser?.data?.sublevel || 'N/A'}</p><p><strong>Enrolled Subjects:</strong> ${currentUser?.data?.enrolledSubjects?.length || 0}</p></div>
+        <div class="receipt-section"><h4>Payment Information</h4><p><strong>Total Tuition:</strong> ₱${(23500 + (currentUser?.data?.enrolledSubjects?.length || 0) * 500).toLocaleString()}.00</p><p><strong>Down Payment:</strong> ₱${registrationData.downPayment || '0'}</p><p><strong>Balance:</strong> ₱${(23500 + (currentUser?.data?.enrolledSubjects?.length || 0) * 500) - (registrationData.downPayment || 0)}</p><p><strong>Plan:</strong> ${registrationData.paymentPlan || 'Full Payment'}</p></div>
+        <div class="receipt-section"><h4>Status</h4><p><strong style="color:#10B981;">✓ Successfully Enrolled</strong></p><p>Academic Year: 2024-2025</p></div>`;
+    const confirmationDetails = document.getElementById('confirmationDetails');
+    if (confirmationDetails) confirmationDetails.innerHTML = receiptHtml;
+}
+
+const nextPhaseBtns = document.querySelectorAll('.next-phase-btn');
+nextPhaseBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const next = parseInt(btn.getAttribute('data-next'));
+        if (currentPhase === 1) {
+            const downPayment = document.getElementById('downPaymentAmount');
+            if (downPayment) registrationData.downPayment = downPayment.value;
+        }
+        if (currentPhase === 2) {
+            const fullName = document.getElementById('personalFullName');
+            const contact = document.getElementById('personalContact');
+            const email = document.getElementById('personalEmail');
+            const address = document.getElementById('personalAddress');
+            registrationData.personal = { 
+                fullName: fullName ? fullName.value : '', 
+                contact: contact ? contact.value : '', 
+                email: email ? email.value : '', 
+                address: address ? address.value : '' 
+            };
+        }
+        if (currentPhase === 4) {
+            const paymentPlan = document.getElementById('paymentPlan');
+            if (paymentPlan) registrationData.paymentPlan = paymentPlan.value;
+        }
+        showPhase(next);
     });
 });
 
-// ============ FIXED SHOW/HIDE STUDENT SIGNUP ============
-document.getElementById('showSignupLink')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    const signupForm = document.getElementById('signup-form');
-    const adminSignupForm = document.getElementById('admin-signup-form');
-    if (signupForm) signupForm.style.display = 'block';
-    if (adminSignupForm) adminSignupForm.style.display = 'none';
-    const previewInput = document.getElementById('signupStudentIdPreview');
-    if (previewInput) previewInput.value = generateStudentId();
+const prevPhaseBtns = document.querySelectorAll('.prev-phase-btn');
+prevPhaseBtns.forEach(btn => { 
+    btn.addEventListener('click', () => showPhase(parseInt(btn.getAttribute('data-prev')))); 
 });
 
-document.getElementById('hideSignupLink')?.addEventListener('click', () => {
-    const signupForm = document.getElementById('signup-form');
-    if (signupForm) signupForm.style.display = 'none';
-});
-
-// ============ FIXED SHOW/HIDE ADMIN SIGNUP ============
-const showAdminSignupLink = document.getElementById('showAdminSignupLink');
-const hideAdminSignupLink = document.getElementById('hideAdminSignupLink');
-
-if (showAdminSignupLink) {
-    showAdminSignupLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        const signupForm = document.getElementById('signup-form');
-        const adminSignupForm = document.getElementById('admin-signup-form');
-        if (signupForm) signupForm.style.display = 'none';
-        if (adminSignupForm) adminSignupForm.style.display = 'block';
+const finalConfirmBtn = document.getElementById('finalConfirmBtn');
+if (finalConfirmBtn) {
+    finalConfirmBtn.addEventListener('click', () => {
+        const agreeTerms = document.getElementById('agreeTerms');
+        if (!agreeTerms || !agreeTerms.checked) { 
+            showCustomNotification('Please agree to terms', 'warning'); 
+            return; 
+        }
+        if (currentUser && currentUser.type === 'student') {
+            if (registrationData.personal) { 
+                currentUser.data.email = registrationData.personal.email; 
+                currentUser.data.contact = registrationData.personal.contact; 
+                currentUser.data.address = registrationData.personal.address; 
+            }
+            currentUser.data.registrationCompleted = true;
+            const idx = usersDB.students.findIndex(s => s.id === currentUser.data.id);
+            if (idx !== -1) usersDB.students[idx] = JSON.parse(JSON.stringify(currentUser.data));
+            saveData();
+            customConsoleLog(`REGISTRATION COMPLETED for ${currentUser.data.name}`, 'success');
+            showCustomNotification('Registration completed successfully!', 'success');
+            switchContent('dashboard');
+            updateDashboard();
+            updateDashboardCharts();
+        }
     });
 }
 
-if (hideAdminSignupLink) {
-    hideAdminSignupLink.addEventListener('click', () => {
-        const adminSignupForm = document.getElementById('admin-signup-form');
-        if (adminSignupForm) adminSignupForm.style.display = 'none';
-    });
-}
-
-// ============ STUDENT SIGNUP ============
-document.getElementById('studentSignupBtn')?.addEventListener('click', () => {
-    const name = document.getElementById('signupName').value.trim();
-    const password = document.getElementById('signupPassword').value;
-    const confirm = document.getElementById('signupConfirmPassword').value;
-    
-    if (!name || !password) { alert('Please fill all fields'); return; }
-    if (password !== confirm) { alert('Passwords do not match'); return; }
-    
-    const studentId = generateStudentId();
-    usersDB.students.push({ 
-        id: studentId, password, name, 
-        educationLevel: null, program: null, yearLevel: null,
-        registrationCompleted: false, enrolledSubjects: [], grades: {}, attendance: {}
-    });
-    saveData();
-    
-    logToCustomConsole(`NEW STUDENT ACCOUNT: ${name} (${studentId})`, "success", true);
-    alert(`Account created! Student ID: ${studentId}`);
-    document.getElementById('signup-form').style.display = 'none';
-    document.getElementById('studentIdInput').value = studentId;
-});
-
-// ============ ADMIN SIGNUP ============
-document.getElementById('adminSignupBtn')?.addEventListener('click', () => {
-    const name = document.getElementById('adminSignupName').value.trim();
-    const email = document.getElementById('adminSignupEmail').value.trim();
-    const password = document.getElementById('adminSignupPassword').value;
-    const confirm = document.getElementById('adminSignupConfirmPassword').value;
-    const adminCode = document.getElementById('adminSignupCode').value;
-    
-    if (!name || !email || !password) {
-        alert('Please fill all fields');
-        return;
-    }
-    if (password !== confirm) {
-        alert('Passwords do not match');
-        return;
-    }
-    if (adminCode !== 'ADMIN2024') {
-        alert('Invalid Admin Registration Code. Use: ADMIN2024');
-        return;
-    }
-    if (usersDB.admins.some(a => a.email === email)) {
-        alert('Admin email already exists');
-        return;
-    }
-    
-    usersDB.admins.push({ email, password, name });
-    saveData();
-    logToCustomConsole(`ADMIN ACCOUNT CREATED: ${name} (${email})`, "success", true);
-    alert('Admin account created successfully! Please login.');
-    
-    document.getElementById('adminSignupName').value = '';
-    document.getElementById('adminSignupEmail').value = '';
-    document.getElementById('adminSignupPassword').value = '';
-    document.getElementById('adminSignupConfirmPassword').value = '';
-    document.getElementById('adminSignupCode').value = '';
-    document.getElementById('admin-signup-form').style.display = 'none';
-});
-
-// ============ STUDENT LOGIN ============
-document.getElementById('studentLoginBtn')?.addEventListener('click', () => {
-    const id = document.getElementById('studentIdInput').value.trim();
-    const pwd = document.getElementById('studentPasswordInput').value;
-    const student = usersDB.students.find(s => s.id === id && s.password === pwd);
-    
-    if (student) {
-        currentUser = { type: 'student', data: student };
-        logToCustomConsole(`STUDENT LOGIN: ${student.name} (${student.id})`, "success", true);
-        updateUIAfterLogin();
-    } else {
-        logToCustomConsole(`FAILED STUDENT LOGIN: ${id}`, "error", true);
-        alert('Invalid Student ID or Password');
-    }
-});
-
-// ============ FIXED ADMIN LOGIN ============
-document.getElementById('adminLoginBtn')?.addEventListener('click', () => {
-    const email = document.getElementById('adminEmailInput').value.trim();
-    const pwd = document.getElementById('adminPasswordInput').value;
-    
-    console.log("=== ADMIN LOGIN ATTEMPT ===");
-    console.log("Email entered:", email);
-    console.log("Available admins:", usersDB.admins);
-    
-    // Check if credentials match any admin
-    const admin = usersDB.admins.find(a => a.email === email && a.password === pwd);
-    
-    if (admin) {
-        currentUser = { type: 'admin', data: admin };
-        logToCustomConsole(`✅ ADMIN LOGIN SUCCESS: ${admin.name} (${email})`, "success", true);
-        updateUIAfterLogin();
-    } else {
-        logToCustomConsole(`❌ ADMIN LOGIN FAILED: ${email}`, "error", true);
-        alert('Invalid Admin Email or Password.\n\nDefault Admin:\nEmail: admin@school.edu\nPassword: admin123');
-    }
-});
-
-document.getElementById('logoutBtnSidebar')?.addEventListener('click', () => {
-    logToCustomConsole(`LOGOUT: ${currentUser?.data?.name}`, "action", true);
-    currentUser = null;
-    loginPanel.classList.add('active');
-    dashboardContent.classList.remove('active');
-    document.getElementById('sidebarUserName').textContent = 'Guest';
-    document.getElementById('sidebarUserRole').textContent = 'Not logged in';
-    document.getElementById('logoutBtnSidebar').style.display = 'none';
-    updatePageTitleAndHeader('login');
-});
-
+// ============ UI UPDATE AFTER LOGIN ==========
 function updateUIAfterLogin() {
-    loginPanel.classList.remove('active');
-    dashboardContent.classList.add('active');
-    document.getElementById('sidebarUserName').textContent = currentUser.data.name;
-    document.getElementById('sidebarUserRole').textContent = currentUser.type === 'student' ? 'Student' : 'Administrator';
-    document.getElementById('logoutBtnSidebar').style.display = 'block';
-    document.getElementById('welcomeUserName').textContent = currentUser.data.name;
+    const sidebarUserName = document.getElementById('sidebarUserName');
+    const sidebarUserRole = document.getElementById('sidebarUserRole');
+    if (sidebarUserName) sidebarUserName.textContent = currentUser.data.name;
+    if (sidebarUserRole) sidebarUserRole.textContent = currentUser.type === 'student' ? 'Student' : 'Administrator';
     
-    const programDisplay = currentUser.data.program || 'Not set';
-    const yearDisplay = currentUser.data.yearLevel || 'Not set';
-    document.getElementById('welcomeDetails').innerHTML = `<i class="fas fa-id-card"></i> ${currentUser.data.id || 'N/A'} | <i class="fas fa-graduation-cap"></i> ${programDisplay} | <i class="fas fa-calendar"></i> ${yearDisplay}`;
-    document.getElementById('enrolledCount').textContent = currentUser.data.enrolledSubjects?.length || 0;
-    
-    if (currentUser.type === 'admin') {
-        document.getElementById('adminRecordsView').style.display = 'block';
-        document.getElementById('studentRecordsView').style.display = 'none';
-        document.getElementById('adminUpdatesView').style.display = 'block';
-        document.getElementById('studentUpdatesView').style.display = 'none';
+    if (currentUser.type === 'student') {
+        const welcomeMessage = document.getElementById('welcomeMessage');
+        const welcomeDetails = document.getElementById('welcomeDetails');
+        const enrolledCount = document.getElementById('enrolledCount');
+        
+        if (welcomeMessage) welcomeMessage.textContent = currentUser.data.loginCount === 1 ? 'Welcome to the System' : `Welcome back, ${currentUser.data.name}!`;
+        if (welcomeDetails) welcomeDetails.innerHTML = `<i class="fas fa-id-card"></i> ${currentUser.data.id}`;
+        if (enrolledCount) enrolledCount.textContent = currentUser.data.enrolledSubjects?.length || 0;
+        
+        document.querySelectorAll('.student-only').forEach(item => item.style.display = 'block');
+        
+        const adminRecords = document.getElementById('adminRecordsView');
+        const adminUpdates = document.getElementById('adminUpdatesView');
+        const studentDashboard = document.querySelector('.student-dashboard-section');
+        const studentRecords = document.getElementById('studentRecordsView');
+        const studentUpdates = document.getElementById('studentUpdatesView');
+        const dashboardGraphs = document.querySelector('.dashboard-graphs');
+        
+        if (adminRecords) adminRecords.style.display = 'none';
+        if (adminUpdates) adminUpdates.style.display = 'none';
+        if (studentDashboard) studentDashboard.style.display = 'block';
+        if (studentRecords) studentRecords.style.display = 'block';
+        if (studentUpdates) studentUpdates.style.display = 'block';
+        if (dashboardGraphs) dashboardGraphs.style.display = 'grid';
+        
+        if (!currentUser.data.scheduleConfirmed && (!currentUser.data.enrolledSubjects || currentUser.data.enrolledSubjects.length === 0)) {
+            switchContent('self-enrollment');
+        } else { 
+            updateRegistrationForm(); 
+            updateDashboard(); 
+            updateDashboardCharts();
+            if (currentUser.data.enrolledSubjects?.length > 0) unlockScheduleGenerator();
+        }
+    } else if (currentUser.type === 'admin') {
+        const welcomeMessage = document.getElementById('welcomeMessage');
+        const welcomeDetails = document.getElementById('welcomeDetails');
+        const welcomeUserRole = document.getElementById('welcomeUserRole');
+        
+        if (welcomeMessage) welcomeMessage.textContent = `Welcome, ${currentUser.data.name || 'Admin'}!`;
+        if (welcomeUserRole) welcomeUserRole.textContent = 'Administrator';
+        if (welcomeDetails) welcomeDetails.innerHTML = `<i class="fas fa-envelope"></i> ${currentUser.data.email}`;
+        
+        document.querySelectorAll('.student-only').forEach(item => item.style.display = 'none');
+        
+        const adminRecords = document.getElementById('adminRecordsView');
+        const adminUpdates = document.getElementById('adminUpdatesView');
+        const studentDashboardSection = document.getElementById('studentDashboardSection');
+        const scheduleHistorySection = document.getElementById('scheduleHistorySection');
+        const studentRecords = document.getElementById('studentRecordsView');
+        const studentUpdates = document.getElementById('studentUpdatesView');
+        const dashboardGraphs = document.querySelector('.dashboard-graphs');
+        const welcomeStats = document.querySelector('.welcome-stats');
+        
+        if (adminRecords) adminRecords.style.display = 'block';
+        if (adminUpdates) adminUpdates.style.display = 'block';
+        if (studentDashboardSection) studentDashboardSection.style.display = 'none';
+        if (scheduleHistorySection) scheduleHistorySection.style.display = 'none';
+        if (studentRecords) studentRecords.style.display = 'none';
+        if (studentUpdates) studentUpdates.style.display = 'none';
+        if (dashboardGraphs) dashboardGraphs.style.display = 'none';
+        if (welcomeStats) welcomeStats.style.display = 'none';
+        
+        renderAdminDashboardSummary();
         loadAdminStudentSelect();
         setupAdminUpdateTabs();
     } else {
-        document.getElementById('adminRecordsView').style.display = 'none';
-        document.getElementById('studentRecordsView').style.display = 'block';
-        document.getElementById('adminUpdatesView').style.display = 'none';
-        document.getElementById('studentUpdatesView').style.display = 'block';
-        document.getElementById('userProgramDisplay').textContent = currentUser.data.program || 'Not set';
-        document.getElementById('userYearDisplay').textContent = currentUser.data.yearLevel || 'Not set';
-        updateEnrolledSubjectsPreview();
+        const welcomeUserRole = document.getElementById('welcomeUserRole');
+        if (welcomeUserRole) welcomeUserRole.textContent = 'Student';
     }
-    updateDashboard();
+    
+    // When a STUDENT logs in, restore the elements that the admin path hides
+    if (currentUser.type === 'student') {
+        const dashboardGraphs = document.querySelector('.dashboard-graphs');
+        const welcomeStats = document.querySelector('.welcome-stats');
+        const welcomeUserRole = document.getElementById('welcomeUserRole');
+        if (dashboardGraphs) dashboardGraphs.style.display = 'grid';
+        if (welcomeStats) welcomeStats.style.display = '';
+        if (welcomeUserRole) welcomeUserRole.textContent = 'Student';
+    }
     updatePageTitleAndHeader('dashboard');
 }
 
 function updateDashboard() {
     if (!currentUser || currentUser.type !== 'student') return;
     const enrolled = currentUser.data.enrolledSubjects || [];
+    const enrolledTable = document.getElementById('enrolledCoursesTable');
+    if (!enrolledTable) return;
+    
     if (enrolled.length === 0) {
-        document.getElementById('enrolledCoursesTable').innerHTML = '<p>No subjects enrolled. Go to <strong>Self-Enrollment</strong>.</p>';
+        enrolledTable.innerHTML = '<div class="empty-state"><i class="fas fa-book-open"></i><p>No subjects enrolled yet. Go to Self-Enrollment to select your subjects.</p></div>';
     } else {
         let html = '<div class="enrolled-courses-table">';
         enrolled.forEach(subject => {
             const info = getScheduleInfo(subject);
             html += `<div class="course-schedule-item">
-                        <span class="course-name">${subject.name}</span>
-                        <span class="course-schedule"><i class="fas fa-calendar"></i> ${info.day} ${info.time}</span>
-                        <span class="course-schedule"><i class="fas fa-door-open"></i> ${info.room}</span>
-                        <span class="course-professor"><i class="fas fa-chalkboard-teacher"></i> ${info.professor}</span>
-                     </div>`;
+                        <span class="course-name">${escapeHtml(subject.name)}</span>
+                        <span class="course-schedule"><i class="fas fa-calendar"></i> ${info.schedules[0]?.day || ''} ${info.schedules[0]?.time || ''}</span>
+                        <span class="course-schedule"><i class="fas fa-door-open"></i> ${escapeHtml(subject.room)}</span>
+                        <span class="course-professor"><i class="fas fa-chalkboard-teacher"></i> ${escapeHtml(subject.professor)}</span>
+                    </div>`;
         });
         html += '</div>';
-        document.getElementById('enrolledCoursesTable').innerHTML = html;
+        enrolledTable.innerHTML = html;
     }
 }
 
-// ============ ENROLLED SUBJECTS PREVIEW FOR SCHEDULE GENERATOR ============
-function updateEnrolledSubjectsPreview() {
-    const enrolled = currentUser?.data?.enrolledSubjects || [];
-    const container = document.getElementById('enrolledSubjectsListPreview');
-    const avoidSelect = document.getElementById('subjectsToAvoid');
-    
+function loadStudentRecordsView() {
+    if (!currentUser || currentUser.type !== 'student') return;
+    const grades = currentUser.data.grades || {};
+    const container = document.getElementById('studentGradesDisplay');
     if (!container) return;
     
-    if (enrolled.length === 0) {
-        container.innerHTML = '<p class="text-muted">No enrolled subjects yet. Go to Self-Enrollment first.</p>';
-        if (avoidSelect) avoidSelect.innerHTML = '<option value="">No subjects available</option>';
-        return;
-    }
-    
-    let badges = '';
-    let avoidOptions = '<option value="">None</option>';
-    enrolled.forEach(subject => {
-        badges += `<span class="enrolled-preview-badge">${subject.name}</span>`;
-        avoidOptions += `<option value="${subject.name}">${subject.name}</option>`;
-    });
-    container.innerHTML = badges;
-    if (avoidSelect) avoidSelect.innerHTML = avoidOptions;
-}
-
-// ============ ENHANCED SELF-ENROLLMENT ============
-let currentSubjects = [];
-let currentFilter = "all";
-let currentSearch = "";
-
-function setupSubjectTabsAndSearch() {
-    document.querySelectorAll('.subject-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            document.querySelectorAll('.subject-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            currentFilter = tab.getAttribute('data-tab');
-            filterAndDisplaySubjects();
+    if (Object.keys(grades).length === 0) {
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-chart-simple"></i><p>No grade records available yet.</p></div>';
+    } else {
+        let html = '<table class="tuition-table"><thead><tr><th>Subject</th><th>Grade</th><th>Status</th></tr></thead><tbody>';
+        Object.entries(grades).forEach(([subject, grade]) => { 
+            html += `<tr><td><strong>${escapeHtml(subject)}</strong></td><td>${grade}%</td><td>${grade >= 75 ? '<span style="color:#10B981;">✓ Passing</span>' : '<span style="color:#ef4444;">⚠ Needs Improvement</span>'}</td></tr>`;
         });
-    });
-    
-    document.getElementById('subjectSearch')?.addEventListener('input', (e) => {
-        currentSearch = e.target.value.toLowerCase();
-        filterAndDisplaySubjects();
-    });
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
 }
 
-function filterAndDisplaySubjects() {
-    let filtered = [...currentSubjects];
-    
-    if (currentFilter !== 'all') {
-        filtered = filtered.filter(s => s.category === currentFilter);
+function loadAdminStudentSelect() { 
+    const select = document.getElementById('adminStudentSelect'); 
+    if (select) {
+        select.innerHTML = '<option value="">Select Student</option>' + usersDB.students.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.id})</option>`).join('');
     }
     
-    if (currentSearch) {
-        filtered = filtered.filter(s => s.name.toLowerCase().includes(currentSearch));
+    const gradeSubjectSelect = document.getElementById('gradeSubjectSelect');
+    if (gradeSubjectSelect) {
+        gradeSubjectSelect.innerHTML = '<option value="">Select Subject</option>';
     }
-    
-    displaySubjectsGrid(filtered);
-    updateSelectedCount();
 }
 
-function displaySubjectsGrid(subjects) {
-    const container = document.getElementById('availableSubjectsList');
-    const enrolled = currentUser.data.enrolledSubjects || [];
-    const enrolledNames = new Set(enrolled.map(e => e.name));
-    
-    if (subjects.length === 0) {
-        container.innerHTML = '<p class="text-center">No subjects found.</p>';
-        return;
-    }
-    
-    let html = '<div class="subjects-grid">';
-    subjects.forEach(subject => {
-        const isEnrolled = enrolledNames.has(subject.name);
-        html += `<div class="subject-card ${isEnrolled ? 'selected' : ''}" data-subject='${JSON.stringify(subject)}'>
-                    <input type="checkbox" class="subject-checkbox" value="${subject.name}" ${isEnrolled ? 'checked disabled' : ''}>
-                    <div class="subject-info">
-                        <strong>${subject.name}</strong>
-                        <small>${subject.room} | ${subject.professor}</small>
-                    </div>
-                    ${isEnrolled ? '<i class="fas fa-check-circle" style="color:#10B981;"></i>' : ''}
-                </div>`;
-    });
-    html += '</div>';
-    container.innerHTML = html;
-    
-    document.querySelectorAll('.subject-card').forEach(card => {
-        const checkbox = card.querySelector('.subject-checkbox');
-        if (!checkbox.disabled) {
-            card.addEventListener('click', (e) => {
-                if (e.target !== checkbox) {
-                    checkbox.checked = !checkbox.checked;
-                    card.classList.toggle('selected', checkbox.checked);
-                    updateSelectedCount();
-                }
-            });
-            checkbox.addEventListener('change', () => {
-                card.classList.toggle('selected', checkbox.checked);
-                updateSelectedCount();
-            });
+const adminStudentSelect = document.getElementById('adminStudentSelect');
+if (adminStudentSelect) {
+    adminStudentSelect.addEventListener('change', function() {
+        const studentId = this.value;
+        const student = usersDB.students.find(s => s.id === studentId);
+        const gradeSubjectSelect = document.getElementById('gradeSubjectSelect');
+        if (student && student.enrolledSubjects && gradeSubjectSelect) {
+            gradeSubjectSelect.innerHTML = '<option value="">Select Subject</option>' + 
+                student.enrolledSubjects.map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
+        } else if (gradeSubjectSelect) {
+            gradeSubjectSelect.innerHTML = '<option value="">Select Subject</option>';
         }
     });
 }
 
-function updateSelectedCount() {
-    const selected = document.querySelectorAll('.subject-checkbox:checked:not([disabled])').length;
-    document.getElementById('selectedCount').textContent = selected;
-    document.getElementById('selectedCountBtn').textContent = selected;
-}
-
-function loadAvailableSubjects() {
-    if (!currentUser || currentUser.type !== 'student') return;
-    const student = currentUser.data;
-    
-    if (!student.program) {
-        document.getElementById('availableSubjectsList').innerHTML = '<p>⚠️ Please complete the Registration Wizard first.</p>';
-        return;
-    }
-    
-    const isHighschool = student.educationLevel === 'highschool';
-    currentSubjects = getSubjectsForProgram(student.program, isHighschool, student.yearLevel);
-    
-    if (currentSubjects.length === 0) {
-        document.getElementById('availableSubjectsList').innerHTML = `<p>No subjects found for ${student.program} - ${student.yearLevel}.</p>`;
-        return;
-    }
-    
-    filterAndDisplaySubjects();
-}
-
-document.getElementById('enrollSelectedBtn')?.addEventListener('click', () => {
-    const checkboxes = document.querySelectorAll('.subject-checkbox:checked:not([disabled])');
-    if (checkboxes.length === 0) { alert('Select at least one subject.'); return; }
-    
-    const student = currentUser.data;
-    const allSubjects = currentSubjects;
-    const newSubjects = Array.from(checkboxes).map(cb => allSubjects.find(s => s.name === cb.value));
-    const enrolled = student.enrolledSubjects || [];
-    const updatedEnrolled = [...enrolled, ...newSubjects];
-    currentUser.data.enrolledSubjects = updatedEnrolled;
-    
-    const studentIndex = usersDB.students.findIndex(s => s.id === currentUser.data.id);
-    if (studentIndex !== -1) usersDB.students[studentIndex].enrolledSubjects = updatedEnrolled;
-    saveData();
-    
-    logToCustomConsole(`ENROLLED ${newSubjects.length} subjects`, "success", true);
-    alert(`Enrolled ${newSubjects.length} subjects!`);
-    loadAvailableSubjects();
-    updateDashboard();
-    updateEnrolledSubjectsPreview();
-});
-
-// ============ UPDATES FEATURE ============
-function loadNotificationsView() {
-    if (!currentUser) return;
-    
-    if (currentUser.type === 'admin') {
-        return;
-    }
-    
-    const container = document.getElementById('studentNotificationsList');
-    let allNotifications = [];
-    
-    notificationsDB.schedule.forEach(n => allNotifications.push({ ...n, type: 'schedule', icon: '📅', color: '#3B82F6' }));
-    notificationsDB.room.forEach(n => allNotifications.push({ ...n, type: 'room', icon: '🏠', color: '#F59E0B' }));
-    notificationsDB.professor.forEach(n => allNotifications.push({ ...n, type: 'professor', icon: '👨‍🏫', color: '#10B981' }));
-    
-    allNotifications.sort((a, b) => new Date(b.date) - new Date(a.date));
-    
-    if (allNotifications.length === 0) {
-        container.innerHTML = '<p>No announcements yet.</p>';
-        return;
-    }
-    
-    let html = '';
-    allNotifications.forEach(n => {
-        html += `<div class="notification-item">
-                    <div class="notification-icon ${n.type}" style="background: ${n.color}20; color: ${n.color}">
-                        <i class="fas ${n.type === 'schedule' ? 'fa-clock' : n.type === 'room' ? 'fa-door-open' : 'fa-chalkboard-teacher'}"></i>
-                    </div>
-                    <div class="notification-content">
-                        <div class="notification-title">${n.title}</div>
-                        <div class="notification-details">${n.details}</div>
-                        <div class="notification-reason">Reason: ${n.reason}</div>
-                        <div class="notification-date">Posted: ${new Date(n.date).toLocaleString()}</div>
-                    </div>
-                </div>`;
+const saveGradeBtn = document.getElementById('saveGradeBtn');
+if (saveGradeBtn) {
+    saveGradeBtn.addEventListener('click', () => {
+        const studentId = document.getElementById('adminStudentSelect')?.value;
+        const subject = document.getElementById('gradeSubjectSelect')?.value;
+        const grade = document.getElementById('gradeInput')?.value;
+        const attendanceStatus = document.getElementById('attendanceStatus')?.value;
+        
+        if (!studentId || !subject || !grade) { 
+            showCustomNotification('Fill all fields', 'warning'); 
+            return; 
+        }
+        
+        const student = usersDB.students.find(s => s.id === studentId);
+        if (student) {
+            if (!student.grades) student.grades = {};
+            student.grades[subject] = grade;
+            
+            if (!student.attendance) student.attendance = {};
+            student.attendance[attendanceStatus] = (student.attendance[attendanceStatus] || 0) + 1;
+            
+            saveData();
+            customConsoleLog(`GRADE SAVED: ${student.name} - ${subject}: ${grade}%`, 'success');
+            showCustomNotification(`Grade saved for ${student.name}`, 'success');
+            if (currentUser?.type === 'student') updateDashboardCharts();
+        }
     });
-    container.innerHTML = html;
 }
 
+// ============ NOTIFICATIONS ==========
 function setupAdminUpdateTabs() {
-    document.querySelectorAll('.admin-tab').forEach(tab => {
+    const adminTabs = document.querySelectorAll('.admin-tab');
+    adminTabs.forEach(tab => {
         tab.addEventListener('click', () => {
-            document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+            adminTabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             const panel = tab.getAttribute('data-admin-tab');
-            document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active-panel'));
-            document.getElementById(`${panel}ChangePanel`).classList.add('active-panel');
+            const adminPanels = document.querySelectorAll('.admin-panel');
+            adminPanels.forEach(p => p.classList.remove('active-panel'));
+            const activePanel = document.getElementById(`${panel}ChangePanel`);
+            if (activePanel) activePanel.classList.add('active-panel');
         });
     });
 }
 
 function addNotification(type, title, details, reason) {
-    const notification = {
-        id: Date.now(),
-        title: title,
-        details: details,
-        reason: reason,
-        date: new Date().toISOString()
-    };
-    
+    const notification = { id: Date.now(), title, details, reason, date: new Date().toISOString() };
     if (type === 'schedule') notificationsDB.schedule.unshift(notification);
     else if (type === 'room') notificationsDB.room.unshift(notification);
-    else if (type === 'professor') notificationsDB.professor.unshift(notification);
-    
+    else notificationsDB.professor.unshift(notification);
     saveNotifications();
-    logToCustomConsole(`NOTIFICATION POSTED: ${title}`, "success", true);
-    alert('Announcement posted successfully!');
-    
-    if (type === 'schedule') {
-        document.getElementById('scheduleSubject').value = '';
-        document.getElementById('oldSchedule').value = '';
-        document.getElementById('newSchedule').value = '';
-        document.getElementById('scheduleReason').value = '';
-    } else if (type === 'room') {
-        document.getElementById('roomSubject').value = '';
-        document.getElementById('oldRoom').value = '';
-        document.getElementById('newRoom').value = '';
-        document.getElementById('roomReason').value = '';
-    } else {
-        document.getElementById('profSubject').value = '';
-        document.getElementById('oldProfessor').value = '';
-        document.getElementById('newProfessor').value = '';
-        document.getElementById('profReason').value = '';
-    }
+    customConsoleLog(`NOTIFICATION POSTED: ${title}`, 'action');
+    showCustomNotification(`Announcement posted: ${title}`, 'success');
 }
 
-document.getElementById('postScheduleChangeBtn')?.addEventListener('click', () => {
-    const subject = document.getElementById('scheduleSubject').value;
-    const oldSchedule = document.getElementById('oldSchedule').value;
-    const newSchedule = document.getElementById('newSchedule').value;
-    const reason = document.getElementById('scheduleReason').value;
+const postScheduleBtn = document.getElementById('postScheduleChangeBtn');
+if (postScheduleBtn) {
+    postScheduleBtn.addEventListener('click', () => {
+        const subject = document.getElementById('scheduleSubject')?.value;
+        const oldSchedule = document.getElementById('oldSchedule')?.value;
+        const newSchedule = document.getElementById('newSchedule')?.value;
+        const reason = document.getElementById('scheduleReason')?.value;
+        if (!subject || !oldSchedule || !newSchedule) { 
+            showCustomNotification('Fill all fields', 'warning'); 
+            return; 
+        }
+        addNotification('schedule', `Schedule Change: ${subject}`, `From: ${oldSchedule} → To: ${newSchedule}`, reason || 'No reason');
+        const scheduleSubject = document.getElementById('scheduleSubject');
+        const oldScheduleInput = document.getElementById('oldSchedule');
+        const newScheduleInput = document.getElementById('newSchedule');
+        const scheduleReason = document.getElementById('scheduleReason');
+        if (scheduleSubject) scheduleSubject.value = '';
+        if (oldScheduleInput) oldScheduleInput.value = '';
+        if (newScheduleInput) newScheduleInput.value = '';
+        if (scheduleReason) scheduleReason.value = '';
+    });
+}
+
+const postRoomBtn = document.getElementById('postRoomChangeBtn');
+if (postRoomBtn) {
+    postRoomBtn.addEventListener('click', () => {
+        const subject = document.getElementById('roomSubject')?.value;
+        const oldRoom = document.getElementById('oldRoom')?.value;
+        const newRoom = document.getElementById('newRoom')?.value;
+        const reason = document.getElementById('roomReason')?.value;
+        if (!subject || !oldRoom || !newRoom) { 
+            showCustomNotification('Fill all fields', 'warning'); 
+            return; 
+        }
+        addNotification('room', `Room Change: ${subject}`, `From: ${oldRoom} → To: ${newRoom}`, reason || 'No reason');
+        const roomSubject = document.getElementById('roomSubject');
+        const oldRoomInput = document.getElementById('oldRoom');
+        const newRoomInput = document.getElementById('newRoom');
+        const roomReason = document.getElementById('roomReason');
+        if (roomSubject) roomSubject.value = '';
+        if (oldRoomInput) oldRoomInput.value = '';
+        if (newRoomInput) newRoomInput.value = '';
+        if (roomReason) roomReason.value = '';
+    });
+}
+
+const postProfessorBtn = document.getElementById('postProfessorChangeBtn');
+if (postProfessorBtn) {
+    postProfessorBtn.addEventListener('click', () => {
+        const subject = document.getElementById('profSubject')?.value;
+        const oldProfessor = document.getElementById('oldProfessor')?.value;
+        const newProfessor = document.getElementById('newProfessor')?.value;
+        const reason = document.getElementById('profReason')?.value;
+        if (!subject || !oldProfessor || !newProfessor) { 
+            showCustomNotification('Fill all fields', 'warning'); 
+            return; 
+        }
+        addNotification('professor', `Professor Change: ${subject}`, `From: ${oldProfessor} → To: ${newProfessor}`, reason || 'No reason');
+        const profSubject = document.getElementById('profSubject');
+        const oldProfessorInput = document.getElementById('oldProfessor');
+        const newProfessorInput = document.getElementById('newProfessor');
+        const profReason = document.getElementById('profReason');
+        if (profSubject) profSubject.value = '';
+        if (oldProfessorInput) oldProfessorInput.value = '';
+        if (newProfessorInput) newProfessorInput.value = '';
+        if (profReason) profReason.value = '';
+    });
+}
+
+function loadNotificationsView() {
+    if (!currentUser || currentUser.type !== 'student') return;
+    const container = document.getElementById('studentNotificationsList');
+    if (!container) return;
     
-    if (!subject || !oldSchedule || !newSchedule) {
-        alert('Please fill all fields');
+    let all = [];
+    if (notificationsDB.schedule) notificationsDB.schedule.forEach(n => all.push({ ...n, type: 'schedule' }));
+    if (notificationsDB.room) notificationsDB.room.forEach(n => all.push({ ...n, type: 'room' }));
+    if (notificationsDB.professor) notificationsDB.professor.forEach(n => all.push({ ...n, type: 'professor' }));
+    all.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    if (all.length === 0) { 
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-bell-slash"></i><p>No announcements at this time.</p></div>'; 
+        return; 
+    }
+    
+    let html = '';
+    all.forEach(n => { 
+        const icon = n.type === 'schedule' ? 'fa-clock' : n.type === 'room' ? 'fa-door-open' : 'fa-chalkboard-teacher';
+        html += `<div class="notification-item">
+                    <div class="notification-icon ${n.type}"><i class="fas ${icon}"></i></div>
+                    <div class="notification-content">
+                        <div class="notification-title">${escapeHtml(n.title)}</div>
+                        <div class="notification-details">${escapeHtml(n.details)}</div>
+                        <div class="notification-reason">${escapeHtml(n.reason)}</div>
+                        <div class="notification-date">${new Date(n.date).toLocaleString()}</div>
+                    </div>
+                </div>`; 
+    });
+    container.innerHTML = html;
+}
+
+// ============ SCHEDULE GENERATOR - FIXED ==========
+function generateSchedule() {
+    console.log("=== GENERATE SCHEDULE CALLED ===");
+    
+    if (!currentUser) {
+        showCustomNotification('Please login first', 'warning');
         return;
     }
     
-    addNotification('schedule', `Schedule Change: ${subject}`, `From: ${oldSchedule} → To: ${newSchedule}`, reason || 'No reason provided');
-});
-
-document.getElementById('postRoomChangeBtn')?.addEventListener('click', () => {
-    const subject = document.getElementById('roomSubject').value;
-    const oldRoom = document.getElementById('oldRoom').value;
-    const newRoom = document.getElementById('newRoom').value;
-    const reason = document.getElementById('roomReason').value;
-    
-    if (!subject || !oldRoom || !newRoom) {
-        alert('Please fill all fields');
+    const subjects = currentUser.data.enrolledSubjects || [];
+    if (subjects.length === 0) {
+        showCustomNotification('No subjects enrolled yet', 'warning');
         return;
     }
     
-    addNotification('room', `Room Change: ${subject}`, `From: ${oldRoom} → To: ${newRoom}`, reason || 'No reason provided');
-});
+    // Update preview badges
+    const preview = document.getElementById('enrolledSubjectsListPreview');
+    if (preview) {
+        preview.innerHTML = '';
+        subjects.forEach(function(subject) {
+            const badge = document.createElement('span');
+            badge.className = 'enrolled-preview-badge';
+            badge.innerHTML = escapeHtml(subject.name);
+            preview.appendChild(badge);
+        });
+    }
+    
+    // Render schedule
+    renderScheduleTable(subjects, 'scheduleResult');
+    showCustomNotification('Schedule generated!', 'success');
+}
 
-document.getElementById('postProfessorChangeBtn')?.addEventListener('click', () => {
-    const subject = document.getElementById('profSubject').value;
-    const oldProfessor = document.getElementById('oldProfessor').value;
-    const newProfessor = document.getElementById('newProfessor').value;
-    const reason = document.getElementById('profReason').value;
-    
-    if (!subject || !oldProfessor || !newProfessor) {
-        alert('Please fill all fields');
-        return;
-    }
-    
-    addNotification('professor', `Professor Change: ${subject}`, `From: ${oldProfessor} → To: ${newProfessor}`, reason || 'No reason provided');
-});
+const generateScheduleBtn = document.getElementById('generateCustomScheduleBtn');
+if (generateScheduleBtn) generateScheduleBtn.addEventListener('click', generateSchedule);
 
-// ============ AI SCHEDULE GENERATOR WITH ATTENDANCE ANALYSIS ============
-function analyzeAttendanceAndGenerateInsights() {
-    const attendance = currentUser.data.attendance || {};
-    const enrolled = currentUser.data.enrolledSubjects || [];
+// ============ NAVIGATION ==========
+function switchContent(action) {
+    const panels = {
+        dashboard: document.getElementById('dashboard-content'),
+        'student-registration': document.getElementById('student-registration-content'),
+        'self-enrollment': document.getElementById('self-enrollment-content'),
+        'student-records': document.getElementById('student-records-content'),
+        updates: document.getElementById('updates-content'),
+        'sched-gen-1': document.getElementById('sched-gen-1-content')
+    };
     
-    if (enrolled.length === 0) {
-        return '<div class="ai-insight-item"><i class="fas fa-info-circle"></i> No enrolled subjects yet. Enroll first to generate schedule.</div>';
-    }
-    
-    let hasData = false;
-    Object.values(attendance).forEach(rate => { if (rate) hasData = true; });
-    
-    if (!hasData) {
-        return '<div class="ai-insight-item"><i class="fas fa-info-circle"></i> No attendance data yet. Schedule will use default optimization.</div>';
-    }
-    
-    let insights = '<div class="ai-insight-item"><i class="fas fa-chart-line"></i> 📊 Attendance Analysis Complete:</div>';
-    let worstSlot = null;
-    let worstRate = 100;
-    const timeSlotCount = { "7-10": 0, "10-1": 0, "1-4": 0, "4-7": 0 };
-    const timeSlotTotal = { "7-10": 0, "10-1": 0, "1-4": 0, "4-7": 0 };
-    
-    enrolled.forEach(subject => {
-        const info = getScheduleInfo(subject);
-        const attendanceRate = attendance[subject.name] || 75;
-        const slot = info.timeSlot;
-        timeSlotTotal[slot] += attendanceRate;
-        timeSlotCount[slot]++;
+    Object.values(panels).forEach(panel => { 
+        if (panel) panel.classList.remove('active'); 
     });
     
-    for (const slot in timeSlotTotal) {
-        if (timeSlotCount[slot] > 0) {
-            const avg = timeSlotTotal[slot] / timeSlotCount[slot];
-            if (avg < worstRate) {
-                worstRate = avg;
-                worstSlot = slot;
-            }
+    const activePanel = panels[action];
+    if (activePanel) activePanel.classList.add('active');
+    
+    const navLinks = document.querySelectorAll('.sidebar nav ul li a');
+    navLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('data-action') === action) link.classList.add('active');
+    });
+    
+    if (action === 'dashboard') { 
+        updateDashboard(); 
+        updateDashboardCharts(); 
+    }
+    if (action === 'student-records') loadStudentRecordsView();
+    if (action === 'updates') loadNotificationsView();
+    if (action === 'self-enrollment') {
+        const subjectsArea = document.getElementById('subjectsDisplayArea');
+        if (subjectsArea) subjectsArea.style.display = 'none';
+        const levelSelect = document.getElementById('enrollmentLevel');
+        if (levelSelect && levelSelect.value) setTimeout(() => loadSubjectsForLevel(), 100);
+    }
+    if (action === 'sched-gen-1') {
+        console.log("Switching to Schedule Generator");
+        
+        if (!currentUser) {
+            showCustomNotification('Please login first', 'warning');
+            return;
+        }
+        
+        const enrolledSubjects = getActiveScheduleSubjects();
+        if (!enrolledSubjects || enrolledSubjects.length === 0) {
+            showCustomNotification('Please select your level and subjects first.', 'warning');
+            switchContent('self-enrollment');
+            return;
+        }
+        
+        console.log("Enrolled subjects count:", enrolledSubjects.length);
+        
+        // Update preview badges
+        const preview = document.getElementById('enrolledSubjectsListPreview');
+        if (preview) {
+            preview.innerHTML = '';
+            enrolledSubjects.forEach(function(subject) {
+                const badge = document.createElement('span');
+                badge.className = 'enrolled-preview-badge';
+                badge.innerHTML = escapeHtml(subject.name);
+                preview.appendChild(badge);
+            });
+        }
+        
+        // Render schedule
+        if (enrolledSubjects.length > 0) {
+            renderScheduleTable(enrolledSubjects, 'scheduleResult');
         }
     }
-    
-    if (worstSlot) {
-        const slotNames = { "7-10": "7:00 AM - 10:00 AM", "10-1": "10:00 AM - 1:00 PM", "1-4": "1:00 PM - 4:00 PM", "4-7": "4:00 PM - 7:00 PM" };
-        insights += `<div class="ai-insight-item"><i class="fas fa-exclamation-triangle"></i> ⚠️ Your lowest attendance is during ${slotNames[worstSlot]} (${Math.round(worstRate)}%)</div>`;
-        insights += `<div class="ai-insight-item"><i class="fas fa-lightbulb"></i> 💡 AI will avoid scheduling classes during this time slot.</div>`;
-        const avoidSelect = document.getElementById('avoidTimeSlot');
-        if (avoidSelect) avoidSelect.value = worstSlot;
-    }
-    
-    return insights;
+    updatePageTitleAndHeader(action);
 }
 
-function generateAISchedule() {
-    const enrolled = currentUser.data.enrolledSubjects || [];
-    if (enrolled.length === 0) {
-        document.getElementById('scheduleResult').innerHTML = '<div class="warning-message"><i class="fas fa-exclamation-triangle"></i> You have no enrolled subjects. Please go to Self-Enrollment first.</div>';
-        document.getElementById('scheduleResult').classList.add('show');
-        return null;
-    }
-    
-    const subjectToAvoid = document.getElementById('subjectsToAvoid')?.value;
-    const preferredTime = document.getElementById('preferredTime').value;
-    const preferredDays = document.getElementById('preferredDays').value;
-    
-    let customDays = [];
-    if (preferredDays === 'custom') {
-        document.querySelectorAll('#customDaysContainer input:checked').forEach(cb => {
-            customDays.push(cb.value);
-        });
-    }
-    
-    let availableSubjects = [...enrolled];
-    
-    // Check if subject to avoid is being removed
-    if (subjectToAvoid) {
-        const subjectExists = availableSubjects.some(s => s.name === subjectToAvoid);
-        if (subjectExists) {
-            if (availableSubjects.length <= 1) {
-                document.getElementById('scheduleResult').innerHTML = '<div class="warning-message"><i class="fas fa-exclamation-triangle"></i> ⚠️ Request Not Granted due to Schedule Inadequacy! You cannot remove this subject as it would leave you with an incomplete schedule.</div>';
-                document.getElementById('scheduleResult').classList.add('show');
-                return null;
-            }
-            availableSubjects = availableSubjects.filter(s => s.name !== subjectToAvoid);
-            logToCustomConsole(`Subject "${subjectToAvoid}" removed from schedule generation`, "action", false);
+const navLinkElements = document.querySelectorAll('.sidebar nav ul li a');
+navLinkElements.forEach(link => {
+    link.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (!currentUser && !isDeveloperModeActive) { 
+            showCustomNotification('Please login first', 'warning'); 
+            return; 
         }
-    }
-    
-    // Filter by preferred time
-    if (preferredTime !== 'any') {
-        availableSubjects = availableSubjects.filter(subj => {
-            const info = getScheduleInfo(subj);
-            const hour = parseInt(info.time.match(/(\d+):/)?.[1] || 8);
-            if (preferredTime === 'morning') return hour >= 8 && hour < 12;
-            if (preferredTime === 'afternoon') return hour >= 13 && hour < 17;
-            if (preferredTime === 'evening') return hour >= 17;
-            return true;
-        });
-    }
-    
-    // Filter by preferred days
-    if (preferredDays === 'mon-wed-fri') {
-        availableSubjects = availableSubjects.filter(subj => {
-            const info = getScheduleInfo(subj);
-            return ['Monday', 'Wednesday', 'Friday'].includes(info.day);
-        });
-    } else if (preferredDays === 'tue-thu') {
-        availableSubjects = availableSubjects.filter(subj => {
-            const info = getScheduleInfo(subj);
-            return ['Tuesday', 'Thursday'].includes(info.day);
-        });
-    } else if (preferredDays === 'custom' && customDays.length > 0) {
-        availableSubjects = availableSubjects.filter(subj => {
-            const info = getScheduleInfo(subj);
-            return customDays.includes(info.day);
-        });
-    }
-    
-    if (availableSubjects.length === 0) {
-        document.getElementById('scheduleResult').innerHTML = '<div class="warning-message"><i class="fas fa-exclamation-triangle"></i> No subjects match your preferences. Please adjust your filters.</div>';
-        document.getElementById('scheduleResult').classList.add('show');
-        return null;
-    }
-    
-    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-    const times = ["8:00 AM - 10:00 AM", "10:00 AM - 12:00 PM", "1:00 PM - 3:00 PM", "3:00 PM - 5:00 PM"];
-    let schedule = {};
-    days.forEach(day => { schedule[day] = {}; times.forEach(time => { schedule[day][time] = null; }); });
-    
-    availableSubjects.forEach(subject => {
-        const info = getScheduleInfo(subject);
-        if (schedule[info.day] && schedule[info.day][info.time] === null) {
-            schedule[info.day][info.time] = subject;
+        if (isDeveloperModeActive) { 
+            showCustomNotification('Exit developer mode to access features', 'warning'); 
+            return; 
         }
+        switchContent(link.getAttribute('data-action'));
     });
-    
-    return schedule;
-}
-
-function renderAISchedule(schedule) {
-    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-    const times = ["8:00 AM - 10:00 AM", "10:00 AM - 12:00 PM", "1:00 PM - 3:00 PM", "3:00 PM - 5:00 PM"];
-    
-    let html = '<div class="schedule-ai-result"><h4><i class="fas fa-brain"></i> AI-Optimized Schedule</h4>';
-    html += '<table class="schedule-table"><thead><tr><th>Time</th><th>Monday</th><th>Tuesday</th><th>Wednesday</th><th>Thursday</th><th>Friday</th></tr></thead><tbody>';
-    
-    times.forEach(time => {
-        html += `<tr><td class="time-col">${time}</td>`;
-        days.forEach(day => {
-            const subject = schedule[day]?.[time];
-            if (subject) {
-                const info = getScheduleInfo(subject);
-                html += `<td><div class="subject-cell">${subject.name}</div>
-                         <div class="room-cell"><i class="fas fa-door-open"></i> ${info.room}</div>
-                         <div class="professor-cell"><i class="fas fa-chalkboard-teacher"></i> ${info.professor}</div></td>`;
-            } else {
-                html += `<td style="color:#94a3b8;">— Free —</td>`;
-            }
-        });
-        html += '</tr>';
-    });
-    
-    html += '</tbody></table></div>';
-    return html;
-}
-
-document.getElementById('generateAIScheduleBtn')?.addEventListener('click', () => {
-    if (!currentUser || currentUser.type !== 'student') {
-        alert('Please login as student');
-        return;
-    }
-    
-    updateEnrolledSubjectsPreview();
-    
-    const enrolled = currentUser.data.enrolledSubjects || [];
-    if (enrolled.length === 0) {
-        alert('Please enroll in subjects first using Self-Enrollment');
-        return;
-    }
-    
-    const insights = analyzeAttendanceAndGenerateInsights();
-    document.getElementById('aiInsights').innerHTML = insights;
-    
-    const schedule = generateAISchedule();
-    if (schedule) {
-        const html = renderAISchedule(schedule);
-        document.getElementById('scheduleResult').innerHTML = html;
-        document.getElementById('scheduleResult').classList.add('show');
-        logToCustomConsole(`AI SCHEDULE GENERATED for ${currentUser.data.enrolledSubjects.length} enrolled subjects`, "success", true);
-    }
 });
 
-// Custom days container toggle
-document.getElementById('preferredDays')?.addEventListener('change', (e) => {
-    document.getElementById('customDaysContainer').style.display = e.target.value === 'custom' ? 'block' : 'none';
-});
-
-// ============ REGISTRATION WIZARD ============
-let currentPhase = 1;
-function showPhase(phase) {
-    for (let i = 1; i <= 5; i++) {
-        const el = document.getElementById(`wizard-phase-${i}`);
-        if (el) el.classList.toggle('active-phase', i === phase);
-    }
-    currentPhase = phase;
-    document.querySelectorAll('.wizard-step').forEach((step, idx) => {
-        step.classList.remove('active', 'completed');
-        if (idx + 1 < phase) step.classList.add('completed');
-        if (idx + 1 === phase) step.classList.add('active');
-    });
-    if (phase === 5) {
-        const personal = registrationData.personal || {};
-        const schoolType = registrationData.school?.level === 'highschool' ? 'High School' : 'College';
-        const schoolValue = registrationData.school?.level === 'highschool' ? `Grade: ${registrationData.school?.grade}` : `Program: ${registrationData.school?.program}, Year: ${registrationData.school?.year}`;
-        document.getElementById('confirmationDetails').innerHTML = `
-            <p><strong>Name:</strong> ${personal.fullName || 'N/A'}</p>
-            <p><strong>Education:</strong> ${schoolType}<br>${schoolValue}</p>
-            <p><strong>Down Payment:</strong> ₱${registrationData.downPayment || '0'}</p>
-        `;
-    }
+function updatePageTitleAndHeader(pageName) {
+    const titles = { 
+        'dashboard': 'Dashboard', 
+        'student-registration': 'Student Registration', 
+        'self-enrollment': 'Self-Enrollment', 
+        'student-records': 'Student Records', 
+        'updates': 'Updates', 
+        'sched-gen-1': 'Schedule Generator' 
+    };
+    const pageHeader = document.getElementById('pageTitle');
+    if (pageHeader) pageHeader.textContent = titles[pageName] || 'Algorithmic Agenda';
 }
 
-document.querySelectorAll('.next-phase-btn').forEach(btn => {
+function showCredits() { 
+    const creditsOverlay = document.getElementById('creditsOverlay');
+    if (creditsOverlay) creditsOverlay.style.display = 'flex';
+}
+function closeCredits() { 
+    const creditsOverlay = document.getElementById('creditsOverlay');
+    if (creditsOverlay) creditsOverlay.style.display = 'none';
+}
+
+const creditsBtn = document.getElementById('creditsBtn');
+if (creditsBtn) creditsBtn.addEventListener('click', showCredits);
+
+const creditsOverlay = document.getElementById('creditsOverlay');
+if (creditsOverlay) {
+    creditsOverlay.addEventListener('click', function(e) { 
+        if (e.target === this) closeCredits(); 
+    });
+}
+
+// ============ EVENT LISTENERS ==========
+const devModeTrigger = document.getElementById('devModeTrigger');
+if (devModeTrigger) devModeTrigger.addEventListener('click', showDeveloperPrompt);
+
+const devCodeSubmit = document.getElementById('devCodeSubmit');
+if (devCodeSubmit) devCodeSubmit.addEventListener('click', verifyDeveloperCode);
+
+const devCodeCancel = document.getElementById('devCodeCancel');
+if (devCodeCancel) devCodeCancel.addEventListener('click', closeDeveloperPrompt);
+
+const customDevPrompt = document.getElementById('customDevPrompt');
+if (customDevPrompt) {
+    customDevPrompt.addEventListener('click', function(e) {
+        if (e.target === this) closeDeveloperPrompt();
+    });
+}
+
+const devCodeInput = document.getElementById('devCodeInput');
+if (devCodeInput) {
+    devCodeInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') verifyDeveloperCode();
+    });
+}
+
+const devExitBtn = document.getElementById('devExitBtn');
+if (devExitBtn) devExitBtn.addEventListener('click', exitDeveloperMode);
+
+const devTerminalExecute = document.getElementById('devTerminalExecute');
+if (devTerminalExecute) devTerminalExecute.addEventListener('click', executeDevCommand);
+
+const devTerminalCommand = document.getElementById('devTerminalCommand');
+if (devTerminalCommand) {
+    devTerminalCommand.addEventListener('keypress', (e) => { 
+        if (e.key === 'Enter') executeDevCommand(); 
+    });
+}
+
+const devRefreshTableBtn = document.getElementById('devRefreshTableBtn');
+if (devRefreshTableBtn) {
+    devRefreshTableBtn.addEventListener('click', () => { 
+        loadDeveloperStudentTable(); 
+        addTerminalLine('Student table refreshed', 'success'); 
+    });
+}
+
+const termCmds = document.querySelectorAll('.term-cmd');
+termCmds.forEach(btn => {
     btn.addEventListener('click', () => {
-        const next = parseInt(btn.getAttribute('data-next'));
-        if (currentPhase === 1) registrationData.downPayment = document.getElementById('downPaymentAmount').value;
-        if (currentPhase === 2) {
-            registrationData.personal = {
-                fullName: document.getElementById('personalFullName').value,
-                contact: document.getElementById('personalContact').value,
-                email: document.getElementById('personalEmail').value,
-                address: document.getElementById('personalAddress').value
-            };
+        const cmd = btn.getAttribute('data-cmd');
+        const devTerminalCmd = document.getElementById('devTerminalCommand');
+        if (devTerminalCmd) devTerminalCmd.value = cmd;
+        executeDevCommand();
+    });
+});
+
+const confirmScheduleBtn = document.getElementById('confirmScheduleBtn');
+if (confirmScheduleBtn) confirmScheduleBtn.addEventListener('click', confirmSchedule);
+
+const modifyScheduleBtn = document.getElementById('modifyScheduleBtn');
+if (modifyScheduleBtn) modifyScheduleBtn.addEventListener('click', modifySchedule);
+
+function closeModifyModal() { 
+    const modal = document.getElementById('scheduleModifyModal');
+    if (modal) modal.style.display = 'none';
+}
+
+const goToSchedGenBtn = document.getElementById('goToSchedGenBtn');
+if (goToSchedGenBtn) {
+    goToSchedGenBtn.addEventListener('click', () => { 
+        closeModifyModal(); 
+        modifySchedule();
+    });
+}
+
+// Login/Signup Event Listeners
+const showSignupLink = document.getElementById('showSignupFormLink');
+if (showSignupLink) {
+    showSignupLink.addEventListener('click', (e) => { 
+        e.preventDefault(); 
+        const studentLogin = document.getElementById('studentLoginForm');
+        const adminLogin = document.getElementById('adminLoginForm');
+        const studentSignup = document.getElementById('studentSignupPanel');
+        const signupPreview = document.getElementById('signupStudentIdPreview');
+        
+        if (studentLogin) studentLogin.style.display = 'none';
+        if (adminLogin) adminLogin.style.display = 'none';
+        if (studentSignup) studentSignup.style.display = 'block';
+        if (signupPreview) signupPreview.value = generateStudentId();
+    });
+}
+
+const showAdminSignupLink = document.getElementById('showAdminSignupFormLink');
+if (showAdminSignupLink) {
+    showAdminSignupLink.addEventListener('click', (e) => { 
+        e.preventDefault(); 
+        const studentLogin = document.getElementById('studentLoginForm');
+        const adminLogin = document.getElementById('adminLoginForm');
+        const adminSignup = document.getElementById('adminSignupPanel');
+        
+        if (studentLogin) studentLogin.style.display = 'none';
+        if (adminLogin) adminLogin.style.display = 'none';
+        if (adminSignup) adminSignup.style.display = 'block';
+    });
+}
+
+const backToStudentLogin = document.getElementById('backToStudentLogin');
+if (backToStudentLogin) {
+    backToStudentLogin.addEventListener('click', (e) => { 
+        e.preventDefault(); 
+        const studentSignup = document.getElementById('studentSignupPanel');
+        const studentLogin = document.getElementById('studentLoginForm');
+        
+        if (studentSignup) studentSignup.style.display = 'none';
+        if (studentLogin) studentLogin.style.display = 'block';
+        
+        const studentTab = document.querySelector('.login-tab-btn[data-login-tab="student"]');
+        if (studentTab) studentTab.click();
+    });
+}
+
+const backToAdminLogin = document.getElementById('backToAdminLogin');
+if (backToAdminLogin) {
+    backToAdminLogin.addEventListener('click', (e) => { 
+        e.preventDefault(); 
+        const adminSignup = document.getElementById('adminSignupPanel');
+        const adminLogin = document.getElementById('adminLoginForm');
+        
+        if (adminSignup) adminSignup.style.display = 'none';
+        if (adminLogin) adminLogin.style.display = 'block';
+        
+        const adminTab = document.querySelector('.login-tab-btn[data-login-tab="admin"]');
+        if (adminTab) adminTab.click();
+    });
+}
+
+const showForgotPassword = document.getElementById('showForgotPassword');
+if (showForgotPassword) {
+    showForgotPassword.addEventListener('click', (e) => { 
+        e.preventDefault(); 
+        const studentLogin = document.getElementById('studentLoginForm');
+        const adminLogin = document.getElementById('adminLoginForm');
+        const forgotPanel = document.getElementById('forgotPasswordPanel');
+        
+        if (studentLogin) studentLogin.style.display = 'none';
+        if (adminLogin) adminLogin.style.display = 'none';
+        if (forgotPanel) forgotPanel.style.display = 'block';
+    });
+}
+
+const backToLoginFromForgot = document.getElementById('backToLoginFromForgot');
+if (backToLoginFromForgot) {
+    backToLoginFromForgot.addEventListener('click', (e) => { 
+        e.preventDefault(); 
+        const forgotPanel = document.getElementById('forgotPasswordPanel');
+        if (forgotPanel) forgotPanel.style.display = 'none';
+        
+        const activeTab = document.querySelector('.login-tab-btn.active');
+        if (activeTab) activeTab.click();
+    });
+}
+
+const sendResetCodeBtn = document.getElementById('sendResetCodeBtn');
+if (sendResetCodeBtn) {
+    sendResetCodeBtn.addEventListener('click', () => { 
+        const email = document.getElementById('forgotEmail')?.value; 
+        const user = [...usersDB.students, ...usersDB.admins].find(u => u.email === email); 
+        if (user) { 
+            const code = Math.floor(100000 + Math.random() * 900000).toString(); 
+            resetCodes[email] = code; 
+            showCustomNotification(`Reset code sent to ${email}`, 'info'); 
+            const resetSection = document.getElementById('resetCodeSection');
+            if (resetSection) resetSection.style.display = 'block';
+        } else showCustomNotification('Email not found', 'error'); 
+    });
+}
+
+const resetPasswordBtn = document.getElementById('resetPasswordBtn');
+if (resetPasswordBtn) {
+    resetPasswordBtn.addEventListener('click', () => { 
+        const email = document.getElementById('forgotEmail')?.value; 
+        const code = document.getElementById('resetCode')?.value; 
+        const newPassword = document.getElementById('newPassword')?.value; 
+        if (resetCodes[email] === code) { 
+            const student = usersDB.students.find(s => s.email === email); 
+            const admin = usersDB.admins.find(a => a.email === email); 
+            if (student) student.password = newPassword; 
+            if (admin) admin.password = newPassword; 
+            saveData(); 
+            showCustomNotification('Password reset successfully!', 'success'); 
+            const forgotPanel = document.getElementById('forgotPasswordPanel');
+            if (forgotPanel) forgotPanel.style.display = 'none';
+            
+            const activeTab = document.querySelector('.login-tab-btn.active');
+            if (activeTab) activeTab.click();
+        } else showCustomNotification('Invalid code', 'error'); 
+    });
+}
+
+const signupPassword = document.getElementById('signupPassword');
+if (signupPassword) signupPassword.addEventListener('input', updatePasswordUI);
+
+// Student Signup
+const studentSignupSubmit = document.getElementById('studentSignupSubmitBtn');
+if (studentSignupSubmit) {
+    studentSignupSubmit.addEventListener('click', () => {
+        const name = document.getElementById('signupFullName')?.value.trim();
+        const password = document.getElementById('signupPassword')?.value;
+        const confirm = document.getElementById('signupConfirmPassword')?.value;
+        
+        if (!name || !password) { 
+            showCustomNotification('Fill all fields', 'error'); 
+            return; 
         }
-        if (currentPhase === 3) {
-            const level = document.getElementById('schoolLevel').value;
-            registrationData.school = { level };
-            if (level === 'highschool') {
-                registrationData.school.grade = document.getElementById('highschoolGrade').value;
-            } else if (level === 'college') {
-                registrationData.school.program = document.getElementById('collegeProgram').value;
-                registrationData.school.year = document.getElementById('collegeYear').value;
+        if (password !== confirm) { 
+            showCustomNotification('Passwords do not match', 'error'); 
+            return; 
+        }
+        if (!updatePasswordUI()) { 
+            showCustomNotification('Password requirements not met', 'error'); 
+            return; 
+        }
+        
+        const studentId = generateStudentId();
+        usersDB.students.push({ 
+            id: studentId, 
+            password, 
+            name, 
+            email: null, 
+            level: null, 
+            sublevel: null, 
+            strand: null, 
+            program: null, 
+            yearLevel: null, 
+            registrationCompleted: false, 
+            enrolledSubjects: [], 
+            grades: {}, 
+            attendance: {}, 
+            loginCount: 0, 
+            lastLogin: null,
+            scheduleConfirmed: false,
+            termType: 'Semester',
+            termPeriod: '1st Semester'
+        });
+        saveData();
+        customConsoleLog(`NEW STUDENT: ${name} (${studentId})`, 'success');
+        showCustomNotification(`Account created! Student ID: ${studentId}`, 'success');
+        
+        const studentSignup = document.getElementById('studentSignupPanel');
+        const studentLogin = document.getElementById('studentLoginForm');
+        const loginStudentId = document.getElementById('loginStudentId');
+        
+        if (studentSignup) studentSignup.style.display = 'none';
+        if (studentLogin) studentLogin.style.display = 'block';
+        if (loginStudentId) loginStudentId.value = studentId;
+        
+        clearSavedCredentials();
+    });
+}
+
+// Admin Signup
+const adminSignupSubmit = document.getElementById('adminSignupSubmitBtn');
+if (adminSignupSubmit) {
+    adminSignupSubmit.addEventListener('click', () => {
+        const name = document.getElementById('adminSignupFullName')?.value.trim();
+        const email = document.getElementById('adminSignupEmail')?.value.trim();
+        const password = document.getElementById('adminSignupPassword')?.value;
+        const confirm = document.getElementById('adminSignupConfirmPassword')?.value;
+        const adminCode = document.getElementById('adminRegCode')?.value;
+        
+        if (!name || !email || !password) { 
+            showCustomNotification('Fill all fields', 'error'); 
+            return; 
+        }
+        if (password !== confirm) { 
+            showCustomNotification('Passwords do not match', 'error'); 
+            return; 
+        }
+        if (adminCode !== 'ADMIN2024') { 
+            showCustomNotification('Invalid admin code', 'error'); 
+            return; 
+        }
+        if (usersDB.admins.some(a => a.email === email)) { 
+            showCustomNotification('Admin exists', 'error'); 
+            return; 
+        }
+        
+        usersDB.admins.push({ email, password, name, lastLogin: null });
+        saveData();
+        customConsoleLog(`ADMIN CREATED: ${name} (${email})`, 'success');
+        showCustomNotification('Admin account created!', 'success');
+        
+        const adminSignup = document.getElementById('adminSignupPanel');
+        const adminLogin = document.getElementById('adminLoginForm');
+        
+        if (adminSignup) adminSignup.style.display = 'none';
+        if (adminLogin) adminLogin.style.display = 'block';
+        
+        clearSavedCredentials();
+    });
+}
+
+// Student Login
+const studentLoginBtn = document.getElementById('studentLoginBtn');
+if (studentLoginBtn) {
+    studentLoginBtn.addEventListener('click', () => {
+        const id = document.getElementById('loginStudentId')?.value.trim();
+        const pwd = document.getElementById('loginStudentPassword')?.value;
+        const student = usersDB.students.find(s => s.id === id && s.password === pwd);
+        
+        if (student) {
+            currentUser = { type: 'student', data: student };
+            student.loginCount = (student.loginCount || 0) + 1;
+            student.lastLogin = new Date().toISOString();
+            saveData();
+            saveRememberedCredentials(id, pwd, false);
+            showMainApp();
+            updateUIAfterLogin();
+            customConsoleLog(`STUDENT LOGIN: ${student.name} (${student.id})`, 'success');
+            showCustomNotification(`Welcome back, ${student.name}!`, 'success');
+            switchContent('dashboard');
+        } else showCustomNotification('Invalid credentials', 'error');
+    });
+}
+
+// Admin Login
+const adminLoginBtn = document.getElementById('adminLoginBtn');
+if (adminLoginBtn) {
+    adminLoginBtn.addEventListener('click', () => {
+        const email = document.getElementById('loginAdminEmail')?.value.trim();
+        const pwd = document.getElementById('loginAdminPassword')?.value;
+        const admin = usersDB.admins.find(a => a.email === email && a.password === pwd);
+        
+        if (admin) {
+            currentUser = { type: 'admin', data: admin };
+            admin.lastLogin = new Date().toISOString();
+            saveData();
+            saveRememberedCredentials(email, pwd, true);
+            showMainApp();
+            updateUIAfterLogin();
+            customConsoleLog(`ADMIN LOGIN: ${admin.name} (${email})`, 'success');
+            showCustomNotification(`Welcome, ${admin.name}!`, 'success');
+        } else showCustomNotification('Invalid credentials. Default: admin@school.edu / admin123', 'error');
+    });
+}
+
+// Logout
+const logoutBtn = document.getElementById('logoutBtnSidebar');
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => { 
+        currentUser = null; 
+        showLoginPage(); 
+        const sidebarUserName = document.getElementById('sidebarUserName');
+        const sidebarUserRole = document.getElementById('sidebarUserRole');
+        
+        if (sidebarUserName) sidebarUserName.textContent = 'Guest'; 
+        if (sidebarUserRole) sidebarUserRole.textContent = 'Not logged in';
+        showCustomNotification('Logged out successfully', 'info');
+    });
+}
+
+// Custom Console Setup
+const toggleConsoleBtn = document.getElementById('toggleConsoleBtn');
+if (toggleConsoleBtn) toggleConsoleBtn.addEventListener('click', showCustomConsole);
+
+const closeConsoleBtn = document.getElementById('closeConsoleBtn');
+if (closeConsoleBtn) closeConsoleBtn.addEventListener('click', hideCustomConsole);
+
+const clearConsoleBtn = document.getElementById('clearConsoleBtn');
+if (clearConsoleBtn) clearConsoleBtn.addEventListener('click', clearCustomConsole);
+
+const consoleExecuteBtn = document.getElementById('consoleExecuteBtn');
+if (consoleExecuteBtn) consoleExecuteBtn.addEventListener('click', executeConsoleCommand);
+
+const consoleCommandInput = document.getElementById('consoleCommandInput');
+if (consoleCommandInput) {
+    consoleCommandInput.addEventListener('keypress', (e) => { 
+        if (e.key === 'Enter') executeConsoleCommand(); 
+    });
+}
+
+// =====================================================================
+// ============  NEW FEATURES (slot system, modify flow,        ========
+// ============  schedule editor, admin approval, SMS OTP)       =======
+// =====================================================================
+
+const DEFAULT_SCHEDULE_CHANGE_LIMIT = 50;
+
+if (!Array.isArray(usersDB.scheduleChangeRequests)) {
+    usersDB.scheduleChangeRequests = [];
+}
+
+function ensureSlotFields(student) {
+    if (typeof student.scheduleChangeLimit !== 'number') {
+        student.scheduleChangeLimit = DEFAULT_SCHEDULE_CHANGE_LIMIT;
+    }
+    if (typeof student.scheduleChangesUsed !== 'number') {
+        student.scheduleChangesUsed = 0;
+    }
+}
+
+function getSlotsRemaining(student) {
+    ensureSlotFields(student);
+    return Math.max(0, student.scheduleChangeLimit - student.scheduleChangesUsed);
+}
+
+function persistCurrentStudent() {
+    if (!currentUser || currentUser.type !== 'student') return;
+    const idx = usersDB.students.findIndex(s => s.id === currentUser.data.id);
+    if (idx !== -1) usersDB.students[idx] = JSON.parse(JSON.stringify(currentUser.data));
+    saveData();
+}
+
+function deepCloneSubjects(subjects) {
+    return JSON.parse(JSON.stringify(subjects || []));
+}
+
+// ============ TIME SLOT HELPERS ==========
+const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+const TIME_SLOTS = ["8:00 AM - 10:00 AM", "10:00 AM - 12:00 PM", "1:00 PM - 3:00 PM", "3:00 PM - 5:00 PM"];
+
+function parseFirstSlot(scheduleString) {
+    if (!scheduleString) return { day: DAYS_OF_WEEK[0], time: TIME_SLOTS[0] };
+    const part = scheduleString.split(';')[0].trim();
+    for (const day of DAYS_OF_WEEK) {
+        if (part.startsWith(day)) {
+            const time = part.replace(day, '').trim();
+            if (TIME_SLOTS.includes(time)) return { day, time };
+            return { day, time: TIME_SLOTS[0] };
+        }
+    }
+    return { day: DAYS_OF_WEEK[0], time: TIME_SLOTS[0] };
+}
+
+function buildScheduleString(day, time) {
+    return `${day} ${time}`;
+}
+
+// ============ CONFIRM SCHEDULE - now also stores defaultSchedule snapshot ===
+const _origConfirmSchedule = confirmSchedule;
+confirmSchedule = function() {
+    _origConfirmSchedule();
+    if (currentUser && currentUser.type === 'student' && currentUser.data.enrolledSubjects?.length) {
+        // Snapshot becomes the "default" schedule (only if not already set
+        // for this enrollment). Clear any pending modification.
+        currentUser.data.defaultSchedule = deepCloneSubjects(currentUser.data.enrolledSubjects);
+        currentUser.data.modifiedSchedule = null;
+        currentUser.data.modificationStatus = null;
+        ensureSlotFields(currentUser.data);
+        persistCurrentStudent();
+    }
+};
+window.confirmSchedule = confirmSchedule;
+
+// ============ MODIFY SCHEDULE FLOW ==========
+// When user clicks "Modify Schedule" in self-enrollment, we:
+//   1) Save selections as enrolledSubjects + defaultSchedule snapshot
+//   2) Open the explanation modal
+//   3) The "Go to Schedule Generator" button (already wired) takes them there
+const modifyBtnEl = document.getElementById('modifyScheduleBtn');
+if (modifyBtnEl) {
+    modifyBtnEl.addEventListener('click', function(e) {
+        e.stopImmediatePropagation();
+        const selectedCheckboxes = document.querySelectorAll('.subject-checkbox:checked');
+        if (selectedCheckboxes.length === 0) {
+            showCustomNotification('Select at least one subject before modifying.', 'warning');
+            return;
+        }
+        if (currentUser && currentUser.type === 'student' && pendingEnrollment) {
+            const names = Array.from(selectedCheckboxes).map(cb => cb.value);
+            const selectedSubjects = pendingEnrollment.subjects.filter(s => names.includes(s.name));
+            currentUser.data.level = pendingEnrollment.levelInfo.level;
+            currentUser.data.sublevel = pendingEnrollment.levelInfo.sublevel;
+            currentUser.data.strand = pendingEnrollment.levelInfo.strand;
+            currentUser.data.program = pendingEnrollment.levelInfo.program;
+            currentUser.data.yearLevel = pendingEnrollment.levelInfo.year;
+            currentUser.data.enrolledSubjects = selectedSubjects;
+            currentUser.data.defaultSchedule = deepCloneSubjects(selectedSubjects);
+            currentUser.data.modifiedSchedule = null;
+            currentUser.data.modificationStatus = null;
+            currentUser.data.scheduleConfirmed = true;
+            currentUser.data.termType = document.getElementById('academicTermSelect')?.value || 'Semester';
+            currentUser.data.termPeriod = document.getElementById('termPeriodSelect')?.value || '1st Semester';
+            ensureSlotFields(currentUser.data);
+            persistCurrentStudent();
+            unlockScheduleGenerator();
+            customConsoleLog(`Default schedule saved (${selectedSubjects.length} subjects). User chose Modify path.`, 'info');
+        }
+        const modal = document.getElementById('scheduleModifyModal');
+        if (modal) modal.style.display = 'flex';
+    }, true);
+}
+
+// ============ SCHEDULE EDITOR (sched-gen-1) ==========
+let scheduleDraft = null;  // working copy of enrolledSubjects with user's edits
+
+function getEffectiveSchedule() {
+    if (!currentUser || !currentUser.data) return [];
+    return currentUser.data.enrolledSubjects || [];
+}
+
+function initScheduleDraft() {
+    scheduleDraft = deepCloneSubjects(getEffectiveSchedule());
+}
+
+function renderSubjectScheduleEditor() {
+    const container = document.getElementById('subjectEditorList');
+    const wrapper = document.getElementById('subjectScheduleEditor');
+    const slotIndicator = document.getElementById('scheduleSlotIndicator');
+    if (!container || !wrapper) return;
+    if (!currentUser || currentUser.type !== 'student') {
+        wrapper.style.display = 'none';
+        if (slotIndicator) slotIndicator.style.display = 'none';
+        return;
+    }
+    if (!scheduleDraft || scheduleDraft.length === 0) {
+        wrapper.style.display = 'none';
+        if (slotIndicator) slotIndicator.style.display = 'none';
+        return;
+    }
+
+    ensureSlotFields(currentUser.data);
+    if (slotIndicator) {
+        slotIndicator.style.display = 'flex';
+        const remEl = document.getElementById('slotsRemainingDisplay');
+        const limEl = document.getElementById('slotsLimitDisplay');
+        if (remEl) remEl.textContent = getSlotsRemaining(currentUser.data);
+        if (limEl) limEl.textContent = currentUser.data.scheduleChangeLimit;
+    }
+
+    wrapper.style.display = 'block';
+    let html = '';
+    scheduleDraft.forEach((subj, idx) => {
+        const slot = parseFirstSlot(subj.schedule);
+        const defaultSubj = (currentUser.data.defaultSchedule || [])[idx];
+        const defaultSlot = defaultSubj ? parseFirstSlot(defaultSubj.schedule) : slot;
+        const dirty = (slot.day !== defaultSlot.day || slot.time !== defaultSlot.time);
+        html += `<div class="subject-editor-row${dirty ? ' dirty' : ''}" data-row-idx="${idx}">
+            <div class="subject-editor-name">${escapeHtml(subj.name)}</div>
+            <select class="subject-editor-day" data-idx="${idx}">
+                ${DAYS_OF_WEEK.map(d => `<option value="${d}" ${d === slot.day ? 'selected' : ''}>${d}</option>`).join('')}
+            </select>
+            <select class="subject-editor-time" data-idx="${idx}">
+                ${TIME_SLOTS.map(t => `<option value="${t}" ${t === slot.time ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+        </div>`;
+    });
+    container.innerHTML = html;
+
+    container.querySelectorAll('.subject-editor-day, .subject-editor-time').forEach(sel => {
+        sel.addEventListener('change', function() {
+            const idx = parseInt(this.getAttribute('data-idx'), 10);
+            const row = this.closest('.subject-editor-row');
+            const day = row.querySelector('.subject-editor-day').value;
+            const time = row.querySelector('.subject-editor-time').value;
+            scheduleDraft[idx].schedule = buildScheduleString(day, time);
+            // Live re-render canvas and toggle dirty flag
+            renderScheduleTable(scheduleDraft, 'scheduleResult');
+            const defaultSubj = (currentUser.data.defaultSchedule || [])[idx];
+            const defaultSlot = defaultSubj ? parseFirstSlot(defaultSubj.schedule) : { day, time };
+            const dirty = (day !== defaultSlot.day || time !== defaultSlot.time);
+            row.classList.toggle('dirty', dirty);
+        });
+    });
+}
+
+function getDirtySubjects() {
+    if (!currentUser || !currentUser.data || !scheduleDraft) return [];
+    const def = currentUser.data.defaultSchedule || [];
+    const dirty = [];
+    scheduleDraft.forEach((subj, idx) => {
+        const cur = parseFirstSlot(subj.schedule);
+        const orig = def[idx] ? parseFirstSlot(def[idx].schedule) : cur;
+        if (cur.day !== orig.day || cur.time !== orig.time) {
+            dirty.push({
+                name: subj.name,
+                from: buildScheduleString(orig.day, orig.time),
+                to: buildScheduleString(cur.day, cur.time)
+            });
+        }
+    });
+    return dirty;
+}
+
+function submitScheduleChangeRequest() {
+    if (!currentUser || currentUser.type !== 'student') return;
+    if (!scheduleDraft || scheduleDraft.length === 0) {
+        showCustomNotification('No schedule loaded to modify.', 'warning');
+        return;
+    }
+    const dirty = getDirtySubjects();
+    if (dirty.length === 0) {
+        showCustomNotification('No changes to submit. Adjust at least one subject\'s day or time first.', 'warning');
+        return;
+    }
+    ensureSlotFields(currentUser.data);
+    if (getSlotsRemaining(currentUser.data) <= 0) {
+        showCustomNotification(`Slot limit reached (${currentUser.data.scheduleChangeLimit}). Ask the developer to reset your slots.`, 'error');
+        return;
+    }
+
+    const req = {
+        id: 'REQ-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+        studentId: currentUser.data.id,
+        studentName: currentUser.data.name,
+        defaultSchedule: deepCloneSubjects(currentUser.data.defaultSchedule || []),
+        modifiedSchedule: deepCloneSubjects(scheduleDraft),
+        changes: dirty,
+        submittedAt: new Date().toISOString(),
+        status: 'pending',
+        reviewedAt: null,
+        reviewedBy: null
+    };
+    usersDB.scheduleChangeRequests.push(req);
+
+    currentUser.data.modifiedSchedule = deepCloneSubjects(scheduleDraft);
+    currentUser.data.modificationStatus = 'pending';
+    currentUser.data.scheduleChangesUsed = (currentUser.data.scheduleChangesUsed || 0) + 1;
+    persistCurrentStudent();
+
+    customConsoleLog(`Schedule change request ${req.id} submitted (${dirty.length} edits, ${getSlotsRemaining(currentUser.data)} slots left)`, 'success');
+    showCustomNotification(`✅ ${dirty.length} change(s) submitted for admin approval. Slots remaining: ${getSlotsRemaining(currentUser.data)}.`, 'success');
+    renderSubjectScheduleEditor();
+    updatePendingRequestsBadge();
+}
+
+function resetScheduleDraftToDefault() {
+    if (!currentUser || !currentUser.data || !currentUser.data.defaultSchedule) {
+        showCustomNotification('No default schedule to reset to.', 'warning');
+        return;
+    }
+    scheduleDraft = deepCloneSubjects(currentUser.data.defaultSchedule);
+    renderScheduleTable(scheduleDraft, 'scheduleResult');
+    renderSubjectScheduleEditor();
+    showCustomNotification('Schedule reset to default.', 'info');
+}
+
+const submitChangeBtn = document.getElementById('submitScheduleChangeBtn');
+if (submitChangeBtn) submitChangeBtn.addEventListener('click', submitScheduleChangeRequest);
+const resetChangeBtn = document.getElementById('resetScheduleBtn');
+if (resetChangeBtn) resetChangeBtn.addEventListener('click', resetScheduleDraftToDefault);
+
+// ============ SCHED-GEN: apply preferred-time / preferred-days filter ==========
+// Replaces the trivial generateSchedule with one that actually re-orders the
+// schedule grid based on the user's preferences and uses the live draft.
+generateSchedule = function() {
+    if (!currentUser) {
+        showCustomNotification('Please login first', 'warning');
+        return;
+    }
+    if (!scheduleDraft || scheduleDraft.length === 0) {
+        initScheduleDraft();
+    }
+    const subjects = scheduleDraft;
+    if (!subjects || subjects.length === 0) {
+        showCustomNotification('No subjects enrolled yet', 'warning');
+        return;
+    }
+
+    const prefTime = document.getElementById('preferredTime')?.value || 'any';
+    const prefDays = document.getElementById('preferredDays')?.value || 'all';
+
+    const allowedDays = (
+        prefDays === 'mon-wed-fri' ? ['Monday', 'Wednesday', 'Friday'] :
+        prefDays === 'tue-thu' ? ['Tuesday', 'Thursday'] :
+        DAYS_OF_WEEK
+    );
+    const allowedTimes = (
+        prefTime === 'morning' ? ['8:00 AM - 10:00 AM', '10:00 AM - 12:00 PM'] :
+        prefTime === 'afternoon' ? ['1:00 PM - 3:00 PM', '3:00 PM - 5:00 PM'] :
+        TIME_SLOTS
+    );
+
+    // Reassign slots: for any subject whose current slot violates the
+    // preferences, move it to the next available allowed slot.
+    const occupied = new Set();
+    subjects.forEach(s => {
+        const cur = parseFirstSlot(s.schedule);
+        const okDay = allowedDays.includes(cur.day);
+        const okTime = allowedTimes.includes(cur.time);
+        if (okDay && okTime) {
+            const key = `${cur.day}|${cur.time}`;
+            if (!occupied.has(key)) {
+                occupied.add(key);
+                return;
             }
         }
-        if (currentPhase === 4) registrationData.paymentPlan = document.getElementById('paymentPlan').value;
-        showPhase(next);
+        // Find a free allowed slot
+        for (const d of allowedDays) {
+            for (const t of allowedTimes) {
+                const key = `${d}|${t}`;
+                if (!occupied.has(key)) {
+                    occupied.add(key);
+                    s.schedule = buildScheduleString(d, t);
+                    return;
+                }
+            }
+        }
+        // No free slot — keep the original
+    });
+
+    // Refresh the badge list
+    const preview = document.getElementById('enrolledSubjectsListPreview');
+    if (preview) {
+        preview.innerHTML = '';
+        subjects.forEach(function(subject) {
+            const badge = document.createElement('span');
+            badge.className = 'enrolled-preview-badge';
+            badge.innerHTML = escapeHtml(subject.name);
+            preview.appendChild(badge);
+        });
+    }
+
+    renderScheduleTable(subjects, 'scheduleResult');
+    renderSubjectScheduleEditor();
+    showCustomNotification(`Schedule generated! (${prefTime}, ${prefDays}) — edit any subject below to customize.`, 'success');
+};
+window.generateSchedule = generateSchedule;
+
+// Re-bind generate button (the original handler captured the old reference)
+const genBtnRebind = document.getElementById('generateCustomScheduleBtn');
+if (genBtnRebind) {
+    const newBtn = genBtnRebind.cloneNode(true);
+    genBtnRebind.parentNode.replaceChild(newBtn, genBtnRebind);
+    newBtn.addEventListener('click', generateSchedule);
+}
+
+// Hook into switchContent so opening sched-gen seeds the draft + editor.
+const _origSwitchContent = switchContent;
+switchContent = function(action) {
+    _origSwitchContent(action);
+    if (action === 'sched-gen-1' && currentUser && currentUser.type === 'student') {
+        initScheduleDraft();
+        renderScheduleTable(scheduleDraft, 'scheduleResult');
+        renderSubjectScheduleEditor();
+    }
+    if (action === 'updates' && currentUser && currentUser.type === 'admin') {
+        renderRequestsPanel();
+    }
+    if (action === 'dashboard' && currentUser && currentUser.type === 'student') {
+        renderScheduleHistorySection();
+    }
+};
+
+// Sched-gen nav "data-action" link bypasses our wrapper because it was
+// captured earlier — re-bind those nav handlers.
+document.querySelectorAll('.sidebar nav ul li a').forEach(link => {
+    const fresh = link.cloneNode(true);
+    link.parentNode.replaceChild(fresh, link);
+    fresh.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (!currentUser && !isDeveloperModeActive) {
+            showCustomNotification('Please login first', 'warning');
+            return;
+        }
+        if (isDeveloperModeActive) {
+            showCustomNotification('Exit developer mode to access features', 'warning');
+            return;
+        }
+        switchContent(fresh.getAttribute('data-action'));
     });
 });
 
-document.querySelectorAll('.prev-phase-btn').forEach(btn => {
-    btn.addEventListener('click', () => showPhase(parseInt(btn.getAttribute('data-prev'))));
-});
+// ============ DASHBOARD: show default vs modified schedule history =========
+function renderScheduleHistorySection() {
+    const section = document.getElementById('scheduleHistorySection');
+    if (!section || !currentUser || currentUser.type !== 'student') return;
+    const data = currentUser.data;
+    const hasDefault = Array.isArray(data.defaultSchedule) && data.defaultSchedule.length > 0;
+    const hasModified = Array.isArray(data.modifiedSchedule) && data.modifiedSchedule.length > 0;
+    if (!hasDefault && !hasModified) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = 'block';
 
-document.getElementById('finalConfirmBtn')?.addEventListener('click', () => {
-    if (!document.getElementById('agreeTerms').checked) { alert('Please agree to terms'); return; }
-    if (!registrationData.school || !registrationData.school.level) { alert('Complete school details'); return; }
-    
-    if (currentUser && currentUser.type === 'student') {
-        if (registrationData.school.level === 'highschool') {
-            currentUser.data.educationLevel = 'highschool';
-            currentUser.data.program = registrationData.school.grade;
-            currentUser.data.yearLevel = registrationData.school.grade;
+    const defaultEl = document.getElementById('defaultScheduleDisplay');
+    const modifiedEl = document.getElementById('modifiedScheduleDisplay');
+    const statusEl = document.getElementById('modifiedScheduleStatus');
+
+    if (defaultEl) {
+        if (hasDefault) {
+            renderScheduleTable(data.defaultSchedule, 'defaultScheduleDisplay');
         } else {
-            currentUser.data.educationLevel = 'college';
-            currentUser.data.program = registrationData.school.program;
-            currentUser.data.yearLevel = registrationData.school.year;
+            defaultEl.innerHTML = '<p style="color:#888;">No default schedule on file.</p>';
         }
-        currentUser.data.registrationCompleted = true;
-        
-        const idx = usersDB.students.findIndex(s => s.id === currentUser.data.id);
-        if (idx !== -1) {
-            usersDB.students[idx] = currentUser.data;
-            saveData();
-        }
-        
-        logToCustomConsole(`REGISTRATION COMPLETED: ${currentUser.data.program} - ${currentUser.data.yearLevel}`, "success", true);
-        alert('Registration completed! Go to Self-Enrollment.');
-        switchContent('dashboard');
-        loadAvailableSubjects();
-        updateDashboard();
-        document.getElementById('userProgramDisplay').textContent = currentUser.data.program;
-        document.getElementById('userYearDisplay').textContent = currentUser.data.yearLevel;
     }
+    if (modifiedEl) {
+        if (hasModified) {
+            renderScheduleTable(data.modifiedSchedule, 'modifiedScheduleDisplay');
+        } else {
+            modifiedEl.innerHTML = '<p style="color:#888;">No modification submitted yet. Use the Schedule Generator to propose one.</p>';
+        }
+    }
+    if (statusEl) {
+        const st = data.modificationStatus || (hasModified ? 'pending' : '');
+        statusEl.textContent = st ? st.toUpperCase() : '';
+        statusEl.className = 'schedule-status-badge' + (st ? ' ' + st : '');
+        statusEl.style.display = st ? 'inline-block' : 'none';
+    }
+}
+
+// Augment updateDashboard to also refresh the history section
+const _origUpdateDashboard = updateDashboard;
+updateDashboard = function() {
+    _origUpdateDashboard();
+    renderScheduleHistorySection();
+};
+window.updateDashboard = updateDashboard;
+
+// ============ ADMIN: pending change requests panel =========
+function getPendingRequestCount() {
+    return (usersDB.scheduleChangeRequests || []).filter(r => r.status === 'pending').length;
+}
+
+function updatePendingRequestsBadge() {
+    const badge = document.getElementById('pendingRequestsBadge');
+    if (!badge) return;
+    const count = getPendingRequestCount();
+    if (count > 0) {
+        badge.style.display = 'inline-block';
+        badge.textContent = count;
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function renderRequestsPanel() {
+    const container = document.getElementById('requestsList');
+    if (!container) return;
+    const pending = (usersDB.scheduleChangeRequests || []).filter(r => r.status === 'pending');
+    if (pending.length === 0) {
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>No pending schedule change requests.</p></div>';
+        updatePendingRequestsBadge();
+        return;
+    }
+    let html = '';
+    pending.forEach(req => {
+        const submitted = new Date(req.submittedAt).toLocaleString();
+        const changeLines = (req.changes || []).map(c =>
+            `<div class="request-change-line"><strong>${escapeHtml(c.name)}</strong> <span class="old">${escapeHtml(c.from)}</span> → <span class="new">${escapeHtml(c.to)}</span></div>`
+        ).join('');
+        html += `<div class="request-card" data-req-id="${req.id}">
+            <div class="request-card-header">
+                <div><strong>${escapeHtml(req.studentName || req.studentId)}</strong><br><small>${escapeHtml(req.studentId)} • ${changeLines.length ? (req.changes.length + ' change(s)') : 'no diff'}</small></div>
+                <small>${submitted}</small>
+            </div>
+            <div class="request-changes">${changeLines || '<small style="color:#888;">No diff recorded.</small>'}</div>
+            <div class="request-actions">
+                <button class="reject-btn" data-action="reject" data-req-id="${req.id}"><i class="fas fa-xmark"></i> Reject</button>
+                <button class="approve-btn" data-action="approve" data-req-id="${req.id}"><i class="fas fa-check"></i> Approve</button>
+            </div>
+        </div>`;
+    });
+    container.innerHTML = html;
+
+    container.querySelectorAll('.approve-btn, .reject-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const reqId = this.getAttribute('data-req-id');
+            const action = this.getAttribute('data-action');
+            handleRequestDecision(reqId, action);
+        });
+    });
+    updatePendingRequestsBadge();
+}
+
+function handleRequestDecision(requestId, action) {
+    const req = (usersDB.scheduleChangeRequests || []).find(r => r.id === requestId);
+    if (!req) return;
+    const student = usersDB.students.find(s => s.id === req.studentId);
+    if (!student) {
+        showCustomNotification('Student not found for this request.', 'error');
+        return;
+    }
+    if (action === 'approve') {
+        student.enrolledSubjects = deepCloneSubjects(req.modifiedSchedule);
+        student.defaultSchedule = deepCloneSubjects(req.modifiedSchedule);
+        student.modifiedSchedule = null;
+        student.modificationStatus = 'approved';
+        req.status = 'approved';
+        customConsoleLog(`Approved request ${req.id} for ${student.name}`, 'success');
+        showCustomNotification(`Approved schedule change for ${student.name}.`, 'success');
+    } else if (action === 'reject') {
+        student.modifiedSchedule = null;
+        student.modificationStatus = 'rejected';
+        req.status = 'rejected';
+        customConsoleLog(`Rejected request ${req.id} for ${student.name}`, 'warning');
+        showCustomNotification(`Rejected schedule change for ${student.name}.`, 'info');
+    }
+    req.reviewedAt = new Date().toISOString();
+    req.reviewedBy = currentUser?.data?.email || 'admin';
+
+    // If the affected student is the one currently logged in, mirror updates
+    if (currentUser?.type === 'student' && currentUser.data.id === student.id) {
+        currentUser.data = student;
+    }
+    saveData();
+    renderRequestsPanel();
+}
+
+// Wire the new admin "requests" tab. The original tab handler already toggles
+// .admin-panel; we only need to rebind so the new tab actually exists in its
+// element list.
+document.querySelectorAll('.admin-tab').forEach(tab => {
+    const fresh = tab.cloneNode(true);
+    tab.parentNode.replaceChild(fresh, tab);
+    fresh.addEventListener('click', function() {
+        document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+        this.classList.add('active');
+        const target = this.getAttribute('data-admin-tab');
+        const map = {
+            'schedule': 'scheduleChangePanel',
+            'room': 'roomChangePanel',
+            'professor': 'professorChangePanel',
+            'requests': 'requestsPanel'
+        };
+        document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active-panel'));
+        const panel = document.getElementById(map[target]);
+        if (panel) panel.classList.add('active-panel');
+        if (target === 'requests') renderRequestsPanel();
+    });
 });
 
-// ============ STUDENT RECORDS ============
-function loadStudentRecordsView() {
-    if (!currentUser) return;
-    const grades = currentUser.data.grades || {};
-    const attendance = currentUser.data.attendance || {};
-    
-    let gradesHtml = '<table class="tuition-table"><thead><tr><th>Subject</th><th>Grade</th><th>Attendance</th></tr></thead><tbody>';
-    let totalGrade = 0;
-    let gradeCount = 0;
-    
-    Object.keys(grades).forEach(subject => {
-        const grade = grades[subject];
-        const att = attendance[subject] || 'N/A';
-        totalGrade += grade;
-        gradeCount++;
-        gradesHtml += `<tr><td><strong>${subject}</strong></td><td>${grade}%</td><td>${att}%</td></tr>`;
-    });
-    const average = gradeCount > 0 ? (totalGrade / gradeCount).toFixed(2) : 'N/A';
-    gradesHtml += `<tr class="total-row"><td><strong>Average</strong></td><td colspan="2"><strong>${average}%</strong></td></tr></tbody></table>`;
-    document.getElementById('studentGradesDisplay').innerHTML = gradesHtml || '<p>No grades yet.</p>';
+// ============ ADMIN SIGNUP — SMS OTP ==========
+let pendingAdminOtp = null; // { code, phone, expiresAt }
+
+function generateOtpCode() {
+    return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-function loadAdminStudentSelect() {
-    const select = document.getElementById('adminStudentSelect');
-    select.innerHTML = '<option>Select Student</option>' + usersDB.students.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join('');
-    select.addEventListener('change', () => {
-        const student = usersDB.students.find(s => s.id === select.value);
-        if (student && student.program) {
-            const subjects = getSubjectsForProgram(student.program, student.educationLevel === 'highschool', student.yearLevel);
-            document.getElementById('gradeSubjectSelect').innerHTML = '<option>Select Subject</option>' + subjects.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+function showOtpModal(phone, code) {
+    const modal = document.getElementById('otpSentModal');
+    if (!modal) return;
+    const phoneEl = document.getElementById('otpModalPhone');
+    const codeEl = document.getElementById('otpModalCode');
+    if (phoneEl) phoneEl.textContent = phone;
+    if (codeEl) codeEl.textContent = code;
+    modal.style.display = 'flex';
+    startOtpCountdown();
+}
+
+let otpCountdownTimer = null;
+function startOtpCountdown() {
+    if (otpCountdownTimer) clearInterval(otpCountdownTimer);
+    const el = document.getElementById('otpExpiryCountdown');
+    if (!el || !pendingAdminOtp) return;
+    const tick = () => {
+        const remaining = Math.max(0, pendingAdminOtp.expiresAt - Date.now());
+        const m = Math.floor(remaining / 60000);
+        const s = Math.floor((remaining % 60000) / 1000);
+        el.textContent = `${m}:${String(s).padStart(2, '0')}`;
+        if (remaining <= 0) {
+            clearInterval(otpCountdownTimer);
+            otpCountdownTimer = null;
         }
+    };
+    tick();
+    otpCountdownTimer = setInterval(tick, 1000);
+}
+
+function closeOtpModal() {
+    const modal = document.getElementById('otpSentModal');
+    if (modal) modal.style.display = 'none';
+}
+window.closeOtpModal = closeOtpModal;
+
+const sendOtpBtn = document.getElementById('adminSendOtpBtn');
+if (sendOtpBtn) {
+    sendOtpBtn.addEventListener('click', () => {
+        const phone = document.getElementById('adminSignupPhone')?.value.trim();
+        if (!phone || phone.replace(/\D/g, '').length < 7) {
+            showCustomNotification('Enter a valid mobile number first.', 'warning');
+            return;
+        }
+        const code = generateOtpCode();
+        pendingAdminOtp = {
+            code,
+            phone,
+            expiresAt: Date.now() + 5 * 60 * 1000
+        };
+        const hint = document.getElementById('adminOtpHint');
+        if (hint) hint.textContent = `Code sent to ${phone} • Expires in 5 min. Resend if needed.`;
+        sendOtpBtn.textContent = 'Resend';
+        showOtpModal(phone, code);
+        customConsoleLog(`SMS OTP issued (simulated): ${code} → ${phone}`, 'info');
     });
 }
 
-document.getElementById('saveGradeBtn')?.addEventListener('click', () => {
-    const studentId = document.getElementById('adminStudentSelect').value;
-    const subject = document.getElementById('gradeSubjectSelect').value;
-    const grade = parseInt(document.getElementById('gradeInput').value);
-    const attendance = parseInt(document.getElementById('attendanceInput').value);
-    
-    if (!studentId || !subject || isNaN(grade)) { alert('Fill all fields'); return; }
-    const student = usersDB.students.find(s => s.id === studentId);
-    if (student) {
-        if (!student.grades) student.grades = {};
-        if (!student.attendance) student.attendance = {};
-        student.grades[subject] = grade;
-        if (!isNaN(attendance)) student.attendance[subject] = attendance;
+// Replace the previous admin-code signup handler entirely.
+const adminSignupBtnNew = document.getElementById('adminSignupSubmitBtn');
+if (adminSignupBtnNew) {
+    const fresh = adminSignupBtnNew.cloneNode(true);
+    adminSignupBtnNew.parentNode.replaceChild(fresh, adminSignupBtnNew);
+    fresh.addEventListener('click', () => {
+        const name = document.getElementById('adminSignupFullName')?.value.trim();
+        const email = document.getElementById('adminSignupEmail')?.value.trim();
+        const password = document.getElementById('adminSignupPassword')?.value;
+        const confirm = document.getElementById('adminSignupConfirmPassword')?.value;
+        const phone = document.getElementById('adminSignupPhone')?.value.trim();
+        const otpEntered = document.getElementById('adminOtpInput')?.value.trim();
+
+        if (!name || !email || !password || !phone) {
+            showCustomNotification('Fill all fields including mobile number.', 'error');
+            return;
+        }
+        if (password !== confirm) {
+            showCustomNotification('Passwords do not match', 'error');
+            return;
+        }
+        if (!pendingAdminOtp) {
+            showCustomNotification('Click "Send Code" first to receive your SMS verification code.', 'warning');
+            return;
+        }
+        if (Date.now() > pendingAdminOtp.expiresAt) {
+            showCustomNotification('Verification code expired. Click "Resend" to get a new one.', 'error');
+            return;
+        }
+        if (otpEntered !== pendingAdminOtp.code) {
+            showCustomNotification('Incorrect verification code.', 'error');
+            return;
+        }
+        if (pendingAdminOtp.phone !== phone) {
+            showCustomNotification('The verification code was sent to a different number. Click "Resend" for the current number.', 'warning');
+            return;
+        }
+        if (usersDB.admins.some(a => a.email === email)) {
+            showCustomNotification('Admin with this email already exists.', 'error');
+            return;
+        }
+
+        usersDB.admins.push({ email, password, name, phone, lastLogin: null, createdAt: new Date().toISOString() });
         saveData();
-        logToCustomConsole(`GRADE SAVED: ${student.name} - ${subject}: ${grade}%`, "success", true);
-        alert('Grade saved!');
-        document.getElementById('gradeInput').value = '';
-        document.getElementById('attendanceInput').value = '';
+        pendingAdminOtp = null;
+        customConsoleLog(`ADMIN CREATED via SMS OTP: ${name} (${email}, ${phone})`, 'success');
+        showCustomNotification('Admin account created!', 'success');
+
+        const adminSignup = document.getElementById('adminSignupPanel');
+        const adminLogin = document.getElementById('adminLoginForm');
+        if (adminSignup) adminSignup.style.display = 'none';
+        if (adminLogin) adminLogin.style.display = 'block';
+        clearSavedCredentials();
+    });
+}
+
+// ============ DEV MODE: extend terminal with slot commands ==========
+function devExecuteSlotCommand(cmd) {
+    // setlimit <studentIdOrAll> <number>
+    // resetslots <studentIdOrAll>
+    // listslots
+    const parts = cmd.trim().split(/\s+/);
+    const head = (parts[0] || '').toLowerCase();
+    if (head === 'setlimit') {
+        const target = parts[1];
+        const n = parseInt(parts[2], 10);
+        if (!target || isNaN(n) || n < 0) return 'Usage: setlimit <studentId|all> <number>';
+        let touched = 0;
+        usersDB.students.forEach(s => {
+            if (target === 'all' || s.id === target) {
+                s.scheduleChangeLimit = n;
+                touched++;
+            }
+        });
+        saveData();
+        return `Updated limit to ${n} for ${touched} student(s).`;
     }
+    if (head === 'resetslots') {
+        const target = parts[1];
+        if (!target) return 'Usage: resetslots <studentId|all>';
+        let touched = 0;
+        usersDB.students.forEach(s => {
+            if (target === 'all' || s.id === target) {
+                s.scheduleChangesUsed = 0;
+                touched++;
+            }
+        });
+        saveData();
+        return `Reset slot usage for ${touched} student(s).`;
+    }
+    if (head === 'listslots') {
+        if (usersDB.students.length === 0) return 'No students.';
+        return usersDB.students.map(s => {
+            ensureSlotFields(s);
+            return `${s.id} (${s.name}): ${s.scheduleChangesUsed}/${s.scheduleChangeLimit} used`;
+        }).join('\n');
+    }
+    if (head === 'requests') {
+        const list = usersDB.scheduleChangeRequests || [];
+        if (list.length === 0) return 'No requests on file.';
+        return list.map(r => `${r.id} ${r.status} student=${r.studentId} edits=${(r.changes||[]).length}`).join('\n');
+    }
+    return null; // not handled
+}
+
+// Hook into the developer terminal (#devTerminalCommand). The original handler
+// is in the codebase too; we add a listener so our command runs FIRST and only
+// echoes "Unknown" if neither path handles it.
+const devTerminalInputEl = document.getElementById('devTerminalCommand');
+const devTerminalExecBtn = document.getElementById('devTerminalExecute');
+function runDevSlotCommand() {
+    const cmd = (devTerminalInputEl?.value || '').trim();
+    if (!cmd) return;
+    const out = devExecuteSlotCommand(cmd);
+    if (out !== null) {
+        addTerminalLine(`> ${cmd}`, 'action');
+        out.split('\n').forEach(line => addTerminalLine(line, 'info'));
+        if (devTerminalInputEl) devTerminalInputEl.value = '';
+    }
+}
+if (devTerminalExecBtn) devTerminalExecBtn.addEventListener('click', runDevSlotCommand, true);
+if (devTerminalInputEl) {
+    devTerminalInputEl.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') runDevSlotCommand();
+    }, true);
+}
+
+// On boot: refresh badge so admins see pending count immediately
+updatePendingRequestsBadge();
+
+// ============ COLLEGE PROGRAM DROPDOWN + CUSTOM PROGRAM MANAGER ==========
+
+// Standard 14-subject curriculum builder for new programs.
+// 7 program-major subjects + 7 GE/PE/NSTP per year. Used for both
+// the 5 built-in extras below and any program added via admin UI.
+const _COMMON_GE_BY_YEAR = {
+    "1st Year": [
+        { name: "Mathematics in the Modern World", units: 3 },
+        { name: "Purposive Communication", units: 3 },
+        { name: "Understanding the Self", units: 3 },
+        { name: "Readings in Philippine History", units: 3 },
+        { name: "Art Appreciation", units: 3 },
+        { name: "PE 1 - Movement Enhancement", units: 2 },
+        { name: "NSTP 1 - CWTS", units: 3 }
+    ],
+    "2nd Year": [
+        { name: "The Contemporary World", units: 3 },
+        { name: "Science, Technology and Society", units: 3 },
+        { name: "Ethics", units: 3 },
+        { name: "Filipino sa Iba't Ibang Disiplina", units: 3 },
+        { name: "Life and Works of Rizal", units: 3 },
+        { name: "PE 2 - Rhythmic Activities", units: 2 },
+        { name: "NSTP 2 - CWTS", units: 3 }
+    ],
+    "3rd Year": [
+        { name: "Research Methods", units: 3 },
+        { name: "Technical Writing", units: 3 },
+        { name: "Statistics and Probability", units: 3 },
+        { name: "Foreign Language Elective", units: 3 },
+        { name: "Free Elective 1", units: 3 },
+        { name: "PE 3 - Team Sports", units: 2 },
+        { name: "Professional Ethics", units: 3 }
+    ],
+    "4th Year": [
+        { name: "Capstone / Thesis 1", units: 3 },
+        { name: "Capstone / Thesis 2", units: 3 },
+        { name: "Internship / Practicum", units: 6 },
+        { name: "Industry Seminar", units: 1 },
+        { name: "Free Elective 2", units: 3 },
+        { name: "Strategic Planning", units: 3 },
+        { name: "Leadership and Management", units: 3 }
+    ]
+};
+
+function buildStandardYear(majorSubjects, year) {
+    const ge = (_COMMON_GE_BY_YEAR[year] || []).map(s =>
+        ({ ...s, room: "RM 100", professor: "TBA", category: "ge" })
+    );
+    const majors = majorSubjects.map(s => ({
+        room: s.room || "RM 200",
+        professor: s.professor || "TBA",
+        category: s.category || "major",
+        units: s.units || 3,
+        ...s
+    }));
+    return [...majors.slice(0, 7), ...ge.slice(0, Math.max(0, 14 - majors.slice(0, 7).length))];
+}
+
+// 5 extra built-in programs (CHED-aligned major titles per year).
+const _EXTRA_BUILTIN_PROGRAMS = {
+    "Bachelor of Science in Business Administration": {
+        majors: {
+            "1st Year": ["Principles of Management", "Microeconomics", "Financial Accounting 1", "Business Mathematics", "Introduction to Business", "Marketing Principles", "Business Communication"],
+            "2nd Year": ["Macroeconomics", "Financial Accounting 2", "Operations Management", "Human Resource Management", "Business Statistics", "Money and Banking", "Organizational Behavior"],
+            "3rd Year": ["Strategic Management", "Business Law", "Taxation", "Investment and Portfolio Mgmt", "Entrepreneurship", "International Business", "Business Research"],
+            "4th Year": ["Capstone in Business", "Business Policy and Strategy", "Corporate Governance", "Risk Management", "Business Internship", "Innovation Management", "Global Trade Operations"]
+        }
+    },
+    "Bachelor of Science in Accountancy": {
+        majors: {
+            "1st Year": ["Financial Accounting 1", "Financial Accounting 2", "Business Mathematics", "Microeconomics", "Principles of Management", "Business Communication", "Computer Fundamentals for Accountants"],
+            "2nd Year": ["Cost Accounting", "Intermediate Accounting 1", "Intermediate Accounting 2", "Macroeconomics", "Statistics for Accountants", "Business Law", "Income Taxation"],
+            "3rd Year": ["Auditing Theory", "Advanced Accounting 1", "Advanced Accounting 2", "Management Advisory Services", "Business Taxation", "Auditing Practice", "Accounting Information Systems"],
+            "4th Year": ["CPA Review - FAR", "CPA Review - AFAR", "CPA Review - Audit", "CPA Review - Tax", "Accountancy Internship", "Government Accounting", "Capstone Audit Case"]
+        }
+    },
+    "Bachelor of Science in Civil Engineering": {
+        majors: {
+            "1st Year": ["Engineering Drawing 1", "Calculus 1", "Chemistry for Engineers", "Engineering Mechanics - Statics", "Computer-Aided Drafting", "Physics for Engineers 1", "Workshop Theory and Practice"],
+            "2nd Year": ["Calculus 2", "Differential Equations", "Strength of Materials", "Surveying 1", "Engineering Mechanics - Dynamics", "Construction Materials and Testing", "Physics for Engineers 2"],
+            "3rd Year": ["Hydraulics", "Structural Theory", "Reinforced Concrete Design", "Steel Design", "Geotechnical Engineering 1", "Surveying 2", "Transportation Engineering"],
+            "4th Year": ["CE Capstone Design", "Construction Project Management", "Earthquake Engineering", "Foundation Engineering", "CE Practicum", "Environmental Engineering", "Estimating and Costing"]
+        }
+    },
+    "Bachelor of Science in Nursing": {
+        majors: {
+            "1st Year": ["Anatomy and Physiology", "Biochemistry for Nursing", "Theoretical Foundations of Nursing", "Nursing Informatics", "Health Assessment", "Microbiology and Parasitology", "Nutrition and Dietetics"],
+            "2nd Year": ["Pharmacology", "Pathophysiology", "Care of Mother and Child 1", "Care of Adults 1", "Community Health Nursing 1", "Nursing Research 1", "Nursing Skills Lab"],
+            "3rd Year": ["Care of Mother and Child 2", "Care of Adults 2", "Care of Older Persons", "Mental Health Nursing", "Community Health Nursing 2", "Nursing Research 2", "Pediatric Nursing"],
+            "4th Year": ["Critical Care Nursing", "Leadership and Management in Nursing", "Disaster Nursing", "Nursing Practicum (Hospital)", "Nursing Practicum (Community)", "NCLEX Review", "Comprehensive Case Study"]
+        }
+    },
+    "Bachelor of Elementary Education": {
+        majors: {
+            "1st Year": ["Child and Adolescent Learners", "The Teaching Profession", "Foundations of Special Education", "Facilitating Learner-Centered Teaching", "Building Inclusive Classrooms", "Educational Technology 1", "Field Study 1 - Observation"],
+            "2nd Year": ["Curriculum Development", "Assessment of Learning 1", "Teaching Math in Elementary", "Teaching Science in Elementary", "Educational Technology 2", "Field Study 2 - Experiencing the Learning Environment", "Teaching Reading"],
+            "3rd Year": ["Teaching Filipino in Elementary", "Teaching English in Elementary", "Teaching Social Studies in Elementary", "Teaching Music, Arts, PE and Health", "Assessment of Learning 2", "Edukasyon sa Pagpapakatao", "Action Research in Education"],
+            "4th Year": ["Practice Teaching - Internship", "Classroom Management", "School Culture and Organization", "Capstone Education Research", "Special Topics in Education", "Education Leadership", "Comprehensive Final Demo"]
+        }
+    }
+};
+
+(function seedExtraBuiltinPrograms() {
+    Object.entries(_EXTRA_BUILTIN_PROGRAMS).forEach(([progName, def]) => {
+        if (collegeCurriculum[progName]) return;
+        const yearObj = {};
+        Object.entries(def.majors).forEach(([year, titles]) => {
+            const majorSubjs = titles.map(t => ({ name: t, room: "TBA", professor: "TBA", category: "major", units: 3 }));
+            yearObj[year] = buildStandardYear(majorSubjs, year);
+        });
+        collegeCurriculum[progName] = yearObj;
+    });
+})();
+
+// Hydrate any admin-created custom programs from storage
+if (!Array.isArray(usersDB.customPrograms)) usersDB.customPrograms = [];
+function hydrateCustomPrograms() {
+    (usersDB.customPrograms || []).forEach(prog => {
+        if (!collegeCurriculum[prog.name]) collegeCurriculum[prog.name] = {};
+        Object.entries(prog.years || {}).forEach(([year, subjects]) => {
+            collegeCurriculum[prog.name][year] = subjects;
+        });
+    });
+}
+hydrateCustomPrograms();
+
+function populateCollegeProgramDropdown() {
+    const sel = document.getElementById('collegeProgramSelect');
+    if (!sel) return;
+    const previousValue = sel.value;
+    const programs = Object.keys(collegeCurriculum).sort();
+    let html = '<option value="">— Select Program —</option>';
+    programs.forEach(name => {
+        const isCustom = (usersDB.customPrograms || []).some(p => p.name === name);
+        const label = name.replace(/^Bachelor of (Science|Arts) in /, 'BS$1 ').replace('BSScience ', 'BS ').replace('BSArts ', 'AB ');
+        html += `<option value="${escapeHtml(name)}">${escapeHtml(label)}${isCustom ? ' ★' : ''}</option>`;
+    });
+    sel.innerHTML = html;
+    if (previousValue && programs.includes(previousValue)) sel.value = previousValue;
+}
+populateCollegeProgramDropdown();
+
+// ============ ADMIN: ADD A PROGRAM/COURSE FORM ==========
+function addProgramSubjectRow(prefill) {
+    const list = document.getElementById('newProgramSubjectList');
+    if (!list) return;
+    const data = prefill || { name: '', units: 3, room: 'TBA', professor: 'TBA', category: 'major' };
+    const row = document.createElement('div');
+    row.className = 'program-subject-row';
+    row.innerHTML = `
+        <input type="text" class="ps-name" placeholder="Subject name" value="${escapeHtml(data.name)}">
+        <input type="text" class="ps-room" placeholder="Room" value="${escapeHtml(data.room)}">
+        <input type="text" class="ps-prof" placeholder="Professor" value="${escapeHtml(data.professor)}">
+        <select class="ps-cat">
+            ${['major','ge','elective','research','practicum'].map(c => `<option value="${c}" ${c === data.category ? 'selected' : ''}>${c}</option>`).join('')}
+        </select>
+        <input type="number" class="ps-units" min="1" max="9" value="${data.units || 3}">
+        <button type="button" class="remove-row-btn" title="Remove">×</button>
+    `;
+    row.querySelector('.remove-row-btn').addEventListener('click', () => row.remove());
+    list.appendChild(row);
+}
+
+function clearProgramForm() {
+    const nameEl = document.getElementById('newProgramName');
+    if (nameEl) nameEl.value = '';
+    const list = document.getElementById('newProgramSubjectList');
+    if (list) list.innerHTML = '';
+    addProgramSubjectRow();
+}
+
+function readProgramFormSubjects() {
+    const rows = document.querySelectorAll('#newProgramSubjectList .program-subject-row');
+    const out = [];
+    rows.forEach(r => {
+        const name = r.querySelector('.ps-name').value.trim();
+        if (!name) return;
+        out.push({
+            name,
+            room: r.querySelector('.ps-room').value.trim() || 'TBA',
+            professor: r.querySelector('.ps-prof').value.trim() || 'TBA',
+            category: r.querySelector('.ps-cat').value,
+            units: parseInt(r.querySelector('.ps-units').value, 10) || 3
+        });
+    });
+    return out;
+}
+
+function saveProgramFromForm() {
+    const name = document.getElementById('newProgramName')?.value.trim();
+    const year = document.getElementById('newProgramYear')?.value;
+    if (!name) { showCustomNotification('Enter a program name.', 'warning'); return; }
+    if (!year) { showCustomNotification('Select a year level.', 'warning'); return; }
+    const subjects = readProgramFormSubjects();
+    if (subjects.length === 0) { showCustomNotification('Add at least one subject.', 'warning'); return; }
+
+    if (!collegeCurriculum[name]) collegeCurriculum[name] = {};
+    collegeCurriculum[name][year] = assignSchedulesToSubjects(subjects);
+
+    let entry = (usersDB.customPrograms || []).find(p => p.name === name);
+    if (!entry) {
+        entry = { name, years: {}, addedAt: new Date().toISOString(), addedBy: currentUser?.data?.email || 'admin' };
+        usersDB.customPrograms.push(entry);
+    }
+    entry.years[year] = collegeCurriculum[name][year];
+    saveData();
+    populateCollegeProgramDropdown();
+    renderCustomProgramsList();
+    customConsoleLog(`Saved program "${name}" - ${year} (${subjects.length} subjects)`, 'success');
+    showCustomNotification(`✅ Program saved: ${name} — ${year} (${subjects.length} subjects).`, 'success');
+    clearProgramForm();
+}
+
+function renderCustomProgramsList() {
+    const container = document.getElementById('customProgramsList');
+    if (!container) return;
+    const list = usersDB.customPrograms || [];
+    if (list.length === 0) {
+        container.innerHTML = '<div class="empty-state"><i class="fas fa-book"></i><p>No custom programs yet.</p></div>';
+        return;
+    }
+    let html = '';
+    list.forEach(p => {
+        const years = Object.keys(p.years || {}).sort();
+        const totalSubj = years.reduce((sum, y) => sum + (p.years[y]?.length || 0), 0);
+        html += `<div class="custom-program-card">
+            <div><strong>${escapeHtml(p.name)}</strong><br><small>${years.join(', ') || '—'} • ${totalSubj} subject(s)</small></div>
+            <button type="button" class="delete-program-btn" data-program="${escapeHtml(p.name)}"><i class="fas fa-trash"></i> Delete</button>
+        </div>`;
+    });
+    container.innerHTML = html;
+    container.querySelectorAll('.delete-program-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const name = this.getAttribute('data-program');
+            if (!confirm(`Delete the custom program "${name}"? This cannot be undone.`)) return;
+            usersDB.customPrograms = (usersDB.customPrograms || []).filter(p => p.name !== name);
+            delete collegeCurriculum[name];
+            saveData();
+            populateCollegeProgramDropdown();
+            renderCustomProgramsList();
+            showCustomNotification(`Deleted program "${name}".`, 'info');
+        });
+    });
+}
+
+const addProgSubjBtn = document.getElementById('addProgramSubjectBtn');
+if (addProgSubjBtn) addProgSubjBtn.addEventListener('click', () => addProgramSubjectRow());
+const saveProgBtn = document.getElementById('saveProgramBtn');
+if (saveProgBtn) saveProgBtn.addEventListener('click', saveProgramFromForm);
+const clearProgBtn = document.getElementById('clearProgramFormBtn');
+if (clearProgBtn) clearProgBtn.addEventListener('click', clearProgramForm);
+// Seed one empty row so the form is usable on first open
+addProgramSubjectRow();
+renderCustomProgramsList();
+
+// Extend the admin-tab handler to include the new "programs" panel.
+// The earlier rewrite of admin tabs (above) used a static map; extend it
+// here so "programs" -> programsPanel works without rewriting that block.
+document.querySelectorAll('.admin-tab[data-admin-tab="programs"]').forEach(tab => {
+    tab.addEventListener('click', function() {
+        document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active-panel'));
+        const panel = document.getElementById('programsPanel');
+        if (panel) panel.classList.add('active-panel');
+        renderCustomProgramsList();
+    });
 });
 
-// ============ UI EVENT LISTENERS ============
-document.getElementById('schoolLevel')?.addEventListener('change', (e) => {
-    document.getElementById('highschoolFields').style.display = e.target.value === 'highschool' ? 'block' : 'none';
-    document.getElementById('collegeFields').style.display = e.target.value === 'college' ? 'block' : 'none';
-});
+// ============ ADMIN DASHBOARD SUMMARY ==========
+function renderAdminDashboardSummary() {
+    if (!currentUser || currentUser.type !== 'admin') return;
+    let card = document.getElementById('adminDashboardSummary');
+    if (!card) {
+        card = document.createElement('div');
+        card.id = 'adminDashboardSummary';
+        card.className = 'admin-dashboard-section';
+        const dashContent = document.getElementById('dashboard-content');
+        if (dashContent) dashContent.appendChild(card);
+    }
+    const totalStudentsCt = usersDB.students.length;
+    const totalAdminsCt = usersDB.admins.length;
+    const enrolledCt = usersDB.students.filter(s => (s.enrolledSubjects || []).length > 0).length;
+    const pendingReqCt = getPendingRequestCount();
+    const customProgCt = (usersDB.customPrograms || []).length;
+    card.innerHTML = `
+        <h3><i class="fas fa-gauge-high"></i> Administrator Overview</h3>
+        <div class="admin-stat-grid">
+            <div class="admin-stat-tile"><span class="num">${totalStudentsCt}</span><small>Total Students</small></div>
+            <div class="admin-stat-tile"><span class="num">${enrolledCt}</span><small>Enrolled Students</small></div>
+            <div class="admin-stat-tile"><span class="num">${totalAdminsCt}</span><small>Total Admins</small></div>
+            <div class="admin-stat-tile"><span class="num">${pendingReqCt}</span><small>Pending Schedule Requests</small></div>
+            <div class="admin-stat-tile"><span class="num">${Object.keys(collegeCurriculum).length}</span><small>College Programs Available</small></div>
+            <div class="admin-stat-tile"><span class="num">${customProgCt}</span><small>Custom Programs Added</small></div>
+        </div>
+    `;
+    card.style.display = 'block';
+}
 
-// ============ INITIALIZE ============
-updatePageTitleAndHeader('login');
-logToCustomConsole("System Ready - AI Schedule Generator & Enhanced Features", "success", false);
-logToCustomConsole("7 College Programs + High School - Complete Curricula", "info", false);
-logToCustomConsole("Default Admin Login: admin@school.edu / admin123", "info", false);
-setTimeout(() => closeConsole(), 5000);
+// Hide the admin overview when a STUDENT logs in afterward
+const _origUpdateUIAfterLogin_admin = updateUIAfterLogin;
+updateUIAfterLogin = function() {
+    _origUpdateUIAfterLogin_admin();
+    if (currentUser && currentUser.type === 'student') {
+        const card = document.getElementById('adminDashboardSummary');
+        if (card) card.style.display = 'none';
+    }
+};
+
+// Make new helpers globally accessible
+window.toggleDevPassword = toggleDevPassword;
+window.deleteStudentFromDev = deleteStudentFromDev;
+window.showCustomNotification = showCustomNotification;
+window.closeModifyModal = closeModifyModal;
+window.closeCredits = closeCredits;
+window.togglePassword = togglePassword;
+window.confirmSchedule = confirmSchedule;
+window.modifySchedule = modifySchedule;
+window.generateSchedule = generateSchedule;
+window.submitScheduleChangeRequest = submitScheduleChangeRequest;
+window.resetScheduleDraftToDefault = resetScheduleDraftToDefault;
+window.renderRequestsPanel = renderRequestsPanel;
+
+// ============ INITIALIZE ==========
+setupLoginTabs();
+initializeLoginPanels();
+initSelfEnrollment();
+showLoginPage();
+customConsoleLog("System Ready - All Features Implemented", 'success');
+customConsoleLog("Developer Mode: Click ⚡ (Code: 712189) | Admin: admin@school.edu / admin123", 'info');

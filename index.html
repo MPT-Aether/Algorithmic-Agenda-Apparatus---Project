@@ -4,18 +4,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    
+
     <title>Algorithmic Agenda Apparatus - Dashboard</title>
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="./style.css">
+    <link rel="stylesheet" href="./patches.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 </head>
 
 <body>
-    <div class="app-container">
-        <aside class="sidebar">
+    <!-- Login Page -->
+    <div id="loginPage" class="login-page">
+        <div class="login-wrapper">
+            <div class="login-brand">
+                <i class="fas fa-microchip"></i>
+                <div class="login-brand-text">
+                    <h1>Algorithmic Agenda Apparatus</h1>
+                    <small>Novulution Tech.</small>
+                </div>
+            </div>
+            <div class="login-container-new">
+                <div class="login-tabs">
+                    <button class="login-tab-btn active" data-login-tab="student">Student</button>
+                    <button class="login-tab-btn" data-login-tab="admin">Admin</button>
+                    <div class="dev-mode-trigger" id="devModeTrigger">⚡</div>
+                </div>
+
+                <div id="studentLoginForm" class="login-form-panel" style="display: block;">
+                    <div class="login-form-group"><label>Student ID</label><input type="text" id="loginStudentId" class="login-input" placeholder="Enter your student ID"></div>
+                    <div class="login-form-group password-group"><label>Password</label><input type="password" id="loginStudentPassword" class="login-input password-input"><button type="button" class="toggle-password" onclick="window.togglePassword('loginStudentPassword')">👁️</button></div>
+                    <div class="login-form-group checkbox-group"><label><input type="checkbox" id="rememberMe"> Remember Me</label></div>
+                    <div class="login-form-group"><a href="#" id="showForgotPassword" class="forgot-link">Forgot Password?</a></div>
+                    <button id="studentLoginBtn" class="login-btn">Login as Student</button>
+                    <p class="signup-prompt">Don't have an account? <a href="#" id="showSignupFormLink">Sign up here</a></p>
+                </div>
+
+                <div id="adminLoginForm" class="login-form-panel" style="display: none;">
+                    <div class="login-form-group"><label>Email Address</label><input type="email" id="loginAdminEmail" class="login-input" placeholder="admin@school.edu"></div>
+                    <div class="login-form-group password-group"><label>Password</label><input type="password" id="loginAdminPassword" class="login-input password-input"><button type="button" class="toggle-password" onclick="window.togglePassword('loginAdminPassword')">👁️</button></div>
+                    <div class="login-form-group checkbox-group"><label><input type="checkbox" id="rememberMeAdmin"> Remember Me</label></div>
+                    <button id="adminLoginBtn" class="login-btn">Login as Admin</button>
+                    <p class="signup-prompt"><a href="#" id="showAdminSignupFormLink">Create Admin Account</a></p>
+                </div>
+
+                <div id="studentSignupPanel" class="login-form-panel" style="display: none;">
+                    <h3>Create Student Account</h3>
+                    <div class="login-form-group"><label>Full Name</label><input type="text" id="signupFullName" class="login-input"></div>
+                    <div class="login-form-group password-group"><label>Password</label><input type="password" id="signupPassword" class="login-input password-input"><button type="button" class="toggle-password" onclick="window.togglePassword('signupPassword')">👁️</button></div>
+                    <div class="login-form-group password-group"><label>Confirm Password</label><input type="password" id="signupConfirmPassword" class="login-input password-input"><button type="button" class="toggle-password" onclick="window.togglePassword('signupConfirmPassword')">👁️</button></div>
+                    <div id="passwordRequirements" class="password-requirements"><small>Password must have:</small><ul><li id="reqLength">✗ 12+ characters</li><li id="reqUppercase">✗ Uppercase letter</li><li id="reqNumber">✗ Number</li><li id="reqSpecial">✗ Special character</li></ul></div>
+                    <div class="login-form-group"><label>Student ID (Auto-generated)</label><input type="text" id="signupStudentIdPreview" class="login-input" readonly></div>
+                    <button id="studentSignupSubmitBtn" class="login-btn">Create Account</button>
+                    <p class="signup-prompt"><a href="#" id="backToStudentLogin">Back to Login</a></p>
+                </div>
+
+                <div id="adminSignupPanel" class="login-form-panel" style="display: none;">
+                    <h3>Create Admin Account</h3>
+                    <div class="login-form-group"><label>Full Name</label><input type="text" id="adminSignupFullName" class="login-input"></div>
+                    <div class="login-form-group"><label>Email</label><input type="email" id="adminSignupEmail" class="login-input"></div>
+                    <div class="login-form-group password-group"><label>Password</label><input type="password" id="adminSignupPassword" class="login-input password-input"><button type="button" class="toggle-password" onclick="window.togglePassword('adminSignupPassword')">👁️</button></div>
+                    <div class="login-form-group password-group"><label>Confirm Password</label><input type="password" id="adminSignupConfirmPassword" class="login-input password-input"><button type="button" class="toggle-password" onclick="window.togglePassword('adminSignupConfirmPassword')">👁️</button></div>
+                    <div class="login-form-group"><label>Mobile Number (for SMS verification)</label><input type="tel" id="adminSignupPhone" class="login-input" placeholder="e.g. +63 917 123 4567"></div>
+                    <div class="login-form-group"><label>SMS Verification Code</label><div class="otp-send-row"><input type="text" id="adminOtpInput" class="login-input" placeholder="6-digit code" maxlength="6"><button type="button" id="adminSendOtpBtn" class="login-btn otp-send-btn">Send Code</button></div><small id="adminOtpHint" style="display:block;margin-top:6px;color:#888;">Click "Send Code" — a 6-digit code will be delivered via SMS (simulated on-screen for this demo).</small></div>
+                    <button id="adminSignupSubmitBtn" class="login-btn">Create Admin Account</button>
+                    <p class="signup-prompt"><a href="#" id="backToAdminLogin">Back to Login</a></p>
+                </div>
+
+                <div id="forgotPasswordPanel" class="login-form-panel" style="display: none;">
+                    <h3>Reset Password</h3>
+                    <div class="login-form-group"><label>Email</label><input type="email" id="forgotEmail" class="login-input"></div>
+                    <button id="sendResetCodeBtn" class="login-btn">Send Reset Code</button>
+                    <div id="resetCodeSection" style="display: none;">
+                        <div class="login-form-group"><label>Reset Code</label><input type="text" id="resetCode" class="login-input"></div>
+                        <div class="login-form-group password-group"><label>New Password</label><input type="password" id="newPassword" class="login-input password-input"><button type="button" class="toggle-password" onclick="window.togglePassword('newPassword')">👁️</button></div>
+                        <button id="resetPasswordBtn" class="login-btn">Reset Password</button>
+                    </div>
+                    <p class="signup-prompt"><a href="#" id="backToLoginFromForgot">Back to Login</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Container -->
+    <div id="mainAppContainer" class="app-container" style="display: none;">
+        <aside class="sidebar" id="mainSidebar">
             <div class="sidebar-header">
                 <i class="fas fa-microchip"></i>
                 <div class="sidebar-brand">
@@ -24,286 +99,62 @@
                 </div>
             </div>
             <nav>
-                <ul>
-                    <li><a href="#" data-action="dashboard">
-                        <i class="fas fa-tachometer-alt"></i>
-                        <span>Dashboard</span>
-                    </a></li>
-                    <li><a href="#" data-action="student-registration">
-                        <i class="fas fa-clipboard-list"></i>
-                        <span>Student Registration</span>
-                    </a></li>
-                    <li><a href="#" data-action="self-enrollment">
-                        <i class="fas fa-user-graduate"></i>
-                        <span>Self-Enrollment</span>
-                    </a></li>
-                    <li><a href="#" data-action="student-records">
-                        <i class="fas fa-chart-line"></i>
-                        <span>Student Records</span>
-                    </a></li>
-                    <li><a href="#" data-action="updates">
-                        <i class="fas fa-bell"></i>
-                        <span>Updates</span>
-                    </a></li>
-                    <li><a href="#" data-action="sched-gen-1">
-                        <i class="fas fa-calendar-alt"></i>
-                        <span>Sched. Gen.</span>
-                    </a></li>
+                <ul id="navMenu">
+                    <li><a href="#" data-action="dashboard"><i class="fas fa-tachometer-alt"></i><span>Dashboard</span></a></li>
+                    <li class="student-only"><a href="#" data-action="self-enrollment"><i class="fas fa-user-graduate"></i><span>Self-Enrollment</span></a></li>
+                    <li class="student-only"><a href="#" data-action="student-registration"><i class="fas fa-clipboard-list"></i><span>Student Registration</span></a></li>
+                    <li><a href="#" data-action="student-records"><i class="fas fa-chart-line"></i><span>Student Records</span></a></li>
+                    <li><a href="#" data-action="updates"><i class="fas fa-bell"></i><span>Updates</span></a></li>
+                    <li id="schedGenNavItem"><a href="#" data-action="sched-gen-1" style="opacity: 0.5; pointer-events: none;"><i class="fas fa-calendar-alt"></i><span>Sched. Gen. (Locked)</span></a></li>
                 </ul>
             </nav>
-            
             <div class="user-info-sidebar">
-                <div class="user-avatar">
-                    <i class="fas fa-user-circle"></i>
-                </div>
-                <div class="user-details-sidebar">
-                    <span id="sidebarUserName">Guest</span>
-                    <small id="sidebarUserRole">Not logged in</small>
-                </div>
-                <button id="logoutBtnSidebar" class="logout-btn-sidebar" style="display: none;">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </button>
+                <div class="user-avatar"><i class="fas fa-user-circle"></i></div>
+                <div class="user-details-sidebar"><span id="sidebarUserName">Guest</span><small id="sidebarUserRole">Not logged in</small></div>
+                <button id="logoutBtnSidebar" class="logout-btn-sidebar">Logout</button>
             </div>
-
             <div class="sidebar-footer">
-                <button id="creditsBtn" class="credits-btn">
-                    <i class="fas fa-copyright"></i> Credits
-                </button>
-                <div class="copyright-footer">
-                    <small>©2026 Novulution Tech. All Rights Reserved</small>
-                </div>
+                <button id="creditsBtn" class="credits-btn"><i class="fas fa-copyright"></i> Credits</button>
+                <div class="copyright-footer"><small>©2026 Novulution Tech. All Rights Reserved</small></div>
             </div>
         </aside>
 
         <main class="main-content">
-            <div class="page-header" id="pageHeader">
-                <h1 id="pageTitle">Dashboard</h1>
-            </div>
+            <div class="page-header"><h1 id="pageTitle">Dashboard</h1></div>
 
-            <!-- Login Panel -->
-            <div id="login-panel" class="content-panel active">
-                <section class="info-section">
-                    <div class="info-card auth-card">
-                        <div class="role-selector">
-                            <button class="role-btn active" data-role="student">👨‍🎓 Student</button>
-                            <button class="role-btn" data-role="admin">👩‍🏫 Admin</button>
-                        </div>
-                        
-                        <div id="student-login-panel" class="role-login-panel active-panel">
-                            <div class="form-group">
-                                <label><i class="fas fa-id-card"></i> Student ID</label>
-                                <input type="text" id="studentIdInput" placeholder="Enter your Student ID" class="form-input">
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-lock"></i> Password</label>
-                                <input type="password" id="studentPasswordInput" placeholder="Enter your password" class="form-input">
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-user-plus"></i> Don't have an account? <a href="#" id="showSignupLink">Sign up here</a></label>
-                            </div>
-                            <button id="studentLoginBtn" class="auth-submit-btn"><i class="fas fa-sign-in-alt"></i> Login as Student</button>
-                        </div>
-                        
-                        <div id="admin-login-panel" class="role-login-panel">
-                            <div class="form-group">
-                                <label><i class="fas fa-envelope"></i> Email Address</label>
-                                <input type="email" id="adminEmailInput" placeholder="Enter your email" class="form-input">
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-lock"></i> Password</label>
-                                <input type="password" id="adminPasswordInput" placeholder="Enter your password" class="form-input">
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-user-plus"></i> <a href="#" id="showAdminSignupLink">Create Admin Account</a></label>
-                            </div>
-                            <button id="adminLoginBtn" class="auth-submit-btn"><i class="fas fa-sign-in-alt"></i> Login as Admin</button>
-                        </div>
-                        
-                        <!-- Student Signup Form -->
-                        <div id="signup-form" style="display: none; margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #e2e8f0;">
-                            <h3>Create Student Account</h3>
-                            <div class="form-group">
-                                <label><i class="fas fa-user"></i> Full Name</label>
-                                <input type="text" id="signupName" class="form-input" placeholder="Enter your full name">
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-lock"></i> Password</label>
-                                <input type="password" id="signupPassword" class="form-input" placeholder="Create a password">
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-check-circle"></i> Confirm Password</label>
-                                <input type="password" id="signupConfirmPassword" class="form-input" placeholder="Confirm your password">
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-id-card"></i> Student ID (Auto-generated)</label>
-                                <input type="text" id="signupStudentIdPreview" class="form-input" readonly style="background: #f8fafc; font-family: monospace;">
-                                <small class="form-hint">Format: YYYYMMDD-XXXX</small>
-                            </div>
-                            <button id="studentSignupBtn" class="auth-submit-btn">Create Account</button>
-                            <button id="hideSignupLink" class="auth-submit-btn" style="background: #6c757d; margin-top: 0.5rem;">Back to Login</button>
-                        </div>
-                        
-                        <!-- Admin Signup Form -->
-                        <div id="admin-signup-form" style="display: none; margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #e2e8f0;">
-                            <h3>Create Admin Account</h3>
-                            <div class="form-group">
-                                <label><i class="fas fa-user-tie"></i> Full Name</label>
-                                <input type="text" id="adminSignupName" class="form-input" placeholder="Enter your full name">
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-envelope"></i> Email Address</label>
-                                <input type="email" id="adminSignupEmail" class="form-input" placeholder="Enter your email">
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-lock"></i> Password</label>
-                                <input type="password" id="adminSignupPassword" class="form-input" placeholder="Create a password">
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-check-circle"></i> Confirm Password</label>
-                                <input type="password" id="adminSignupConfirmPassword" class="form-input" placeholder="Confirm your password">
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-key"></i> Admin Registration Code</label>
-                                <input type="password" id="adminSignupCode" class="form-input" placeholder="Enter admin code">
-                                <small class="form-hint">Default admin code: ADMIN2024</small>
-                            </div>
-                            <button id="adminSignupBtn" class="auth-submit-btn">Create Admin Account</button>
-                            <button id="hideAdminSignupLink" class="auth-submit-btn" style="background: #6c757d; margin-top: 0.5rem;">Back to Login</button>
-                        </div>
+            <div id="dashboard-content" class="content-panel active">
+                <div class="enhanced-welcome-card">
+                    <div class="welcome-avatar"><i class="fas fa-user-graduate"></i></div>
+                    <div class="welcome-info">
+                        <h3 id="welcomeMessage">Welcome to the System</h3>
+                        <p>You are logged in as <strong id="welcomeUserRole">Student</strong></p>
+                        <div class="welcome-details" id="welcomeDetails"></div>
                     </div>
-                </section>
-            </div>
-
-            <!-- Dashboard Content -->
-            <div id="dashboard-content" class="content-panel">
-                <section class="dashboard-section">
-                    <div class="enhanced-welcome-card" id="welcomeCard">
-                        <div class="welcome-avatar">
-                            <i class="fas fa-user-graduate"></i>
-                        </div>
-                        <div class="welcome-info">
-                            <h3>Welcome back, <span id="welcomeUserName">User</span>!</h3>
-                            <p>You are logged in as <strong id="welcomeUserRole">Student</strong></p>
-                            <div class="welcome-details" id="welcomeDetails"></div>
-                        </div>
-                        <div class="welcome-stats">
-                            <div class="stat-item">
-                                <i class="fas fa-book"></i>
-                                <span id="enrolledCount">0</span>
-                                <small>Enrolled</small>
-                            </div>
-                            <div class="stat-item">
-                                <i class="fas fa-calendar-week"></i>
-                                <span id="attendanceRate">0%</span>
-                                <small>Attendance</small>
-                            </div>
-                            <div class="stat-item">
-                                <i class="fas fa-chart-line"></i>
-                                <span id="gradeAvg">N/A</span>
-                                <small>Average</small>
-                            </div>
-                        </div>
+                    <div class="welcome-stats">
+                        <div class="stat-item"><i class="fas fa-book"></i><span id="enrolledCount">0</span><small>Enrolled</small></div>
+                        <div class="stat-item"><i class="fas fa-calendar-week"></i><span id="attendanceRate">0%</span><small>Attendance</small></div>
+                        <div class="stat-item"><i class="fas fa-chart-line"></i><span id="gradeAvg">N/A</span><small>Average</small></div>
                     </div>
-                    
-                    <div id="studentDashboardSection" style="background: white; border-radius: 28px; padding: 1.5rem;">
-                        <h3><i class="fas fa-book-open"></i> My Enrolled Courses</h3>
-                        <div id="enrolledCoursesTable" class="enrolled-courses-table">
-                            <p>No subjects enrolled yet. Go to <strong>Self-Enrollment</strong> to select your subjects.</p>
+                </div>
+                <div class="dashboard-graphs">
+                    <div class="graph-card"><h3><i class="fas fa-chart-bar"></i> Grade Records</h3><canvas id="gradeBarChart" width="400" height="300"></canvas><div class="graph-description"><p>Recent grade performance across subjects</p></div></div>
+                    <div class="graph-card"><h3><i class="fas fa-chart-pie"></i> Attendance Records</h3><canvas id="attendancePieChart" width="400" height="300"></canvas><div class="graph-description"><p>Attendance distribution: Present vs Absent vs Tardy</p></div></div>
+                </div>
+                <div id="studentDashboardSection" class="student-dashboard-section">
+                    <h3><i class="fas fa-book-open"></i> My Enrolled Courses</h3>
+                    <div id="enrolledCoursesTable"><p>No subjects enrolled yet.</p></div>
+                </div>
+                <div id="scheduleHistorySection" class="student-dashboard-section" style="display:none;">
+                    <h3><i class="fas fa-history"></i> Schedule History</h3>
+                    <p class="schedule-history-note">Your default (auto-assigned) schedule and your latest modification request are shown side-by-side until the modification is approved by an admin.</p>
+                    <div class="schedule-history-grid">
+                        <div class="schedule-history-card">
+                            <h4><i class="fas fa-calendar"></i> Default Schedule</h4>
+                            <div id="defaultScheduleDisplay"></div>
                         </div>
-                    </div>
-                </section>
-            </div>
-
-            <!-- Student Registration Wizard -->
-            <div id="student-registration-content" class="content-panel">
-                <div class="wizard-container">
-                    <div class="wizard-header">
-                        <div class="wizard-steps" id="wizardSteps">
-                            <span class="wizard-step" data-wiz-step="1">1. Payment</span>
-                            <span class="wizard-step" data-wiz-step="2">2. Personal</span>
-                            <span class="wizard-step" data-wiz-step="3">3. School</span>
-                            <span class="wizard-step" data-wiz-step="4">4. Payment Plan</span>
-                            <span class="wizard-step" data-wiz-step="5">5. Confirm</span>
-                        </div>
-                    </div>
-                    
-                    <div id="wizard-phase-1" class="wizard-phase active-phase">
-                        <div class="info-card">
-                            <h3><i class="fas fa-receipt"></i> Tuition Payment</h3>
-                            <div class="tuition-summary">
-                                <table class="tuition-table"><tr><td>Tuition Fee (18 units):</td><td>₱18,000.00</td></tr>
-                                    <tr><td>Miscellaneous Fee:</td><td>₱3,500.00</td></tr>
-                                    <tr class="total-row"><td><strong>TOTAL:</strong></td><td><strong>₱23,500.00</strong></td></tr>
-                                </table>
-                            </div>
-                            <div class="form-group">
-                                <label>Down Payment (Min ₱5,000)</label>
-                                <input type="number" id="downPaymentAmount" class="form-input" value="5000" min="5000" max="23500">
-                            </div>
-                            <button class="next-phase-btn" data-next="2">Next <i class="fas fa-arrow-right"></i></button>
-                        </div>
-                    </div>
-                    
-                    <div id="wizard-phase-2" class="wizard-phase">
-                        <div class="info-card">
-                            <h3><i class="fas fa-id-card"></i> Personal Details</h3>
-                            <div class="form-row">
-                                <div class="form-group"><label>Full Name</label><input type="text" id="personalFullName" class="form-input"></div>
-                                <div class="form-group"><label>Contact</label><input type="text" id="personalContact" class="form-input"></div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group"><label>Email</label><input type="email" id="personalEmail" class="form-input"></div>
-                                <div class="form-group"><label>Address</label><input type="text" id="personalAddress" class="form-input"></div>
-                            </div>
-                            <div class="wizard-nav-buttons">
-                                <button class="prev-phase-btn" data-prev="1">Back</button>
-                                <button class="next-phase-btn" data-next="3">Next</button>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div id="wizard-phase-3" class="wizard-phase">
-                        <div class="info-card">
-                            <h3><i class="fas fa-school"></i> School Details</h3>
-                            <div class="form-group">
-                                <label>Education Level</label>
-                                <select id="schoolLevel" class="form-select">
-                                    <option value="">Select Level</option>
-                                    <option value="highschool">High School</option>
-                                    <option value="college">College</option>
-                                </select>
-                            </div>
-                            <div id="highschoolFields" style="display: none;">
-                                <div class="form-group"><label>Grade</label><select id="highschoolGrade" class="form-select"><option>Grade 9</option><option>Grade 10</option><option>Grade 11</option><option>Grade 12</option></select></div>
-                            </div>
-                            <div id="collegeFields" style="display: none;">
-                                <div class="form-group"><label>Program</label><select id="collegeProgram" class="form-select"><option>Bachelor of Science in Information Technology</option><option>Bachelor of Science in Computer Science</option><option>Bachelor of Science in Nursing</option><option>Bachelor of Science in Tourism Management</option><option>Bachelor of Science in Civil Engineering</option><option>Bachelor of Arts in Literature</option><option>Bachelor of Science in Astronomy</option></select></div>
-                                <div class="form-group"><label>Year</label><select id="collegeYear" class="form-select"><option>1st Year</option><option>2nd Year</option><option>3rd Year</option><option>4th Year</option></select></div>
-                            </div>
-                            <div class="wizard-nav-buttons">
-                                <button class="prev-phase-btn" data-prev="2">Back</button>
-                                <button class="next-phase-btn" data-next="4">Next</button>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div id="wizard-phase-4" class="wizard-phase">
-                        <div class="info-card">
-                            <h3><i class="fas fa-credit-card"></i> Payment Plan</h3>
-                            <select id="paymentPlan" class="form-select"><option>Full Payment</option><option>Installment</option></select>
-                            <div class="wizard-nav-buttons">
-                                <button class="prev-phase-btn" data-prev="3">Back</button>
-                                <button class="next-phase-btn" data-next="5">Next</button>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div id="wizard-phase-5" class="wizard-phase">
-                        <div class="info-card">
-                            <h3><i class="fas fa-check-circle"></i> Confirmation</h3>
-                            <div id="confirmationDetails"></div>
-                            <label><input type="checkbox" id="agreeTerms"> I confirm all information is accurate</label>
-                            <button id="finalConfirmBtn" class="final-confirm-btn">Complete Registration</button>
+                        <div class="schedule-history-card">
+                            <h4><i class="fas fa-pen-to-square"></i> Modified Schedule <span id="modifiedScheduleStatus" class="schedule-status-badge"></span></h4>
+                            <div id="modifiedScheduleDisplay"></div>
                         </div>
                     </div>
                 </div>
@@ -311,197 +162,326 @@
 
             <!-- Self-Enrollment -->
             <div id="self-enrollment-content" class="content-panel">
-                <section class="info-section">
-                    <div class="info-card">
-                        <div class="role-indicator"><span class="role-badge"><i class="fas fa-user-tag"></i> <strong id="currentRoleMode">Student Mode</strong></span></div>
-                        <div id="studentEnrollmentPanel">
-                            <h3>Select Your Subjects</h3>
-                            <div class="enrollment-info-bar">
-                                <div class="info-item"><i class="fas fa-graduation-cap"></i> <strong id="userProgramDisplay">-</strong></div>
-                                <div class="info-item"><i class="fas fa-calendar-alt"></i> <strong id="userYearDisplay">-</strong></div>
-                                <div class="info-item"><i class="fas fa-clock"></i> <span id="selectedCount">0</span> subjects selected</div>
+                <div class="info-card-white">
+                    <div class="role-indicator"><span class="role-badge">Student Mode</span></div>
+                    <h3>Select Your Level and Subjects</h3>
+
+                    <!-- Academic Term Section -->
+                    <div id="academicTermSection" class="academic-term-section">
+                        <h4><i class="fas fa-calendar-alt"></i> Academic Term Settings</h4>
+                        <div class="term-row">
+                            <div class="app-form-group">
+                                <label>Term Type</label>
+                                <select id="academicTermSelect" class="dark-select">
+                                    <option value="Semester">Semester (2 terms, 6-9 subjects)</option>
+                                    <option value="Tri-Semester">Tri-Semester (3 terms, 5-7 subjects)</option>
+                                    <option value="Quarter">Quarter (4 terms, 4-6 subjects)</option>
+                                    <option value="Block Plan">Block Plan (2 blocks, 3-4 subjects)</option>
+                                </select>
                             </div>
-                            <div class="subjects-tabs">
-                                <button class="subject-tab active" data-tab="all">All Subjects</button>
-                                <button class="subject-tab" data-tab="core">Core Subjects</button>
-                                <button class="subject-tab" data-tab="major">Major Subjects</button>
-                                <button class="subject-tab" data-tab="elective">Electives</button>
+                            <div class="app-form-group">
+                                <label>Term Period</label>
+                                <select id="termPeriodSelect" class="dark-select">
+                                    <option value="1st Semester">1st Semester</option>
+                                    <option value="2nd Semester">2nd Semester</option>
+                                </select>
                             </div>
-                            <div class="subjects-search">
-                                <input type="text" id="subjectSearch" class="form-input" placeholder="🔍 Search subjects...">
-                            </div>
-                            <div class="subjects-grid" id="availableSubjectsList">
-                                <p>Complete registration first.</p>
-                            </div>
-                            <button id="enrollSelectedBtn" class="enroll-action-btn"><i class="fas fa-check-circle"></i> Enroll Selected Subjects (<span id="selectedCountBtn">0</span>)</button>
                         </div>
+                        <div id="termInfoDisplay" class="term-info"></div>
                     </div>
-                </section>
+
+                    <div class="level-selector">
+                        <div class="app-form-group"><label>Education Level</label><select id="enrollmentLevel" class="dark-select"><option value="">— Select Level —</option><option value="juniorHigh">Junior High School (Grade 9-10)</option><option value="seniorHigh">Senior High School (Grade 11-12)</option><option value="college">College</option></select></div>
+                        <div id="juniorHighOptions" style="display: none;"><div class="app-form-group"><label>Grade</label><select id="juniorHighGrade" class="dark-select"><option>Grade 9</option><option>Grade 10</option></select></div></div>
+                        <div id="seniorHighOptions" style="display: none;"><div class="app-form-group"><label>Grade</label><select id="seniorHighGrade" class="dark-select"><option>Grade 11</option><option>Grade 12</option></select></div><div class="app-form-group"><label>Strand</label><select id="seniorHighStrand" class="dark-select"><option>STEM</option><option>ABM</option><option>HUMMS</option><option>GAS</option><option>HE</option><option>ICT</option><option>IA</option><option>AFA</option><option>Arts</option><option>Sports</option></select></div></div>
+                        <div id="collegeOptions" style="display: none;"><div class="app-form-group"><label>Program</label><select id="collegeProgramSelect" class="dark-select"><option value="">— Select Program —</option></select></div><div class="app-form-group"><label>Year</label><select id="collegeYearSelect" class="dark-select"><option>1st Year</option><option>2nd Year</option><option>3rd Year</option><option>4th Year</option></select></div></div>
+                    </div>
+                    <div id="subjectsDisplayArea" style="display: none;">
+                        <h4>Available Subjects</h4>
+                        <div class="subjects-search"><input type="text" id="subjectSearch" class="dark-input" placeholder="🔍 Search subjects..."></div>
+
+                        <!-- NEW: Enrollment summary (units + clash warning) -->
+                        <div id="enrollmentSummaryBar" class="enrollment-summary-bar" style="display:none;">
+                            <div class="enrollment-summary-left">
+                                <span class="summary-stat"><i class="fas fa-list-check"></i> Selected: <strong id="summarySelectedCount">0</strong></span>
+                                <span class="summary-stat"><i class="fas fa-hourglass-half"></i> Total Units: <strong id="summaryTotalUnits">0</strong></span>
+                            </div>
+                            <div id="summaryClashBox" class="summary-clash-box" style="display:none;">
+                                <i class="fas fa-triangle-exclamation"></i>
+                                <span id="summaryClashText">No clashes detected.</span>
+                            </div>
+                        </div>
+
+                        <div id="availableSubjectsList" class="subjects-grid-full"></div>
+                        <div class="schedule-confirmation"><h4>Schedule Preview</h4><div id="previewScheduleTable"></div><div class="confirmation-buttons"><button id="confirmScheduleBtn" class="confirm-btn">✅ Confirm Schedule</button><button id="modifyScheduleBtn" class="modify-btn">✏️ Modify Schedule</button></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Student Registration -->
+            <div id="student-registration-content" class="content-panel">
+                <div class="wizard-container">
+                    <div class="wizard-steps"><span class="wizard-step" data-wiz-step="1">1. Payment</span><span class="wizard-step" data-wiz-step="2">2. Personal Details</span><span class="wizard-step" data-wiz-step="3">3. School Details</span><span class="wizard-step" data-wiz-step="4">4. Payment Plan</span><span class="wizard-step" data-wiz-step="5">5. Confirmation</span></div>
+                    <div id="wizard-phase-1" class="wizard-phase active-phase"><div class="info-card-white"><h3>💰 Tuition Payment</h3><div class="tuition-summary"><table class="tuition-table"><tr><td>Tuition Fee:</td><td>₱18,000.00</td></tr><tr><td>Miscellaneous Fee:</td><td>₱3,500.00</td></tr><tr class="total-row"><td><strong>TOTAL:</strong></td><td><strong>₱23,500.00</strong></td></tr></table></div><div class="app-form-group"><label>Down Payment (Min ₱5,000)</label><input type="number" id="downPaymentAmount" class="dark-input" value="5000" min="5000" max="23500"></div><button class="next-phase-btn" data-next="2">Proceed →</button></div></div>
+                    <div id="wizard-phase-2" class="wizard-phase"><div class="info-card-white"><h3>👤 Personal Details</h3><div class="form-grid"><div class="app-form-group full-width"><label>Full Name</label><input type="text" id="personalFullName" class="dark-input" readonly></div><div class="app-form-group"><label>Contact Number</label><input type="text" id="personalContact" class="dark-input"></div><div class="app-form-group"><label>Email Address</label><input type="email" id="personalEmail" class="dark-input"></div><div class="app-form-group full-width"><label>Complete Address</label><textarea id="personalAddress" class="dark-input" rows="3"></textarea></div></div><div class="wizard-nav-buttons"><button class="prev-phase-btn" data-prev="1">← Back</button><button class="next-phase-btn" data-next="3">Next →</button></div></div></div>
+                    <div id="wizard-phase-3" class="wizard-phase"><div class="info-card-white"><h3>🏫 School Details</h3><div class="form-grid"><div class="app-form-group"><label>Student ID</label><input type="text" id="schoolStudentId" class="dark-input" readonly></div><div class="app-form-group"><label>Program/Strand</label><input type="text" id="schoolProgram" class="dark-input" readonly></div><div class="app-form-group"><label>Year/Grade</label><input type="text" id="schoolYearLevel" class="dark-input" readonly></div></div><div class="wizard-nav-buttons"><button class="prev-phase-btn" data-prev="2">← Back</button><button class="next-phase-btn" data-next="4">Next →</button></div></div></div>
+                    <div id="wizard-phase-4" class="wizard-phase"><div class="info-card-white"><h3>💳 Payment Plan</h3><div class="app-form-group"><label>Select Payment Plan</label><select id="paymentPlan" class="dark-select"><option>Full Payment</option><option>Installment (2 terms)</option></select></div><div class="wizard-nav-buttons"><button class="prev-phase-btn" data-prev="3">← Back</button><button class="next-phase-btn" data-next="5">Next →</button></div></div></div>
+                    <div id="wizard-phase-5" class="wizard-phase"><div class="info-card-white receipt-card"><h3>🎓 Registration Confirmation</h3><div id="confirmationDetails" class="registration-receipt"></div><div class="terms-checkbox"><label><input type="checkbox" id="agreeTerms"> I confirm all information is accurate</label></div><button id="finalConfirmBtn" class="final-confirm-btn">Complete Registration</button></div></div>
+                </div>
             </div>
 
             <!-- Student Records -->
             <div id="student-records-content" class="content-panel">
-                <section class="info-section">
-                    <div id="studentRecordsView" class="info-card"><h3>My Grades</h3><div id="studentGradesDisplay"></div></div>
-                    <div id="adminRecordsView" class="info-card" style="display: none;"><h3>Admin - Manage Grades</h3>
-                        <div class="form-group"><label>Student</label><select id="adminStudentSelect" class="form-select"></select></div>
-                        <div class="form-group"><label>Subject</label><select id="gradeSubjectSelect" class="form-select"></select></div>
-                        <div class="form-row"><div class="form-group"><label>Grade</label><input type="number" id="gradeInput" class="form-input"></div>
-                        <div class="form-group"><label>Attendance</label><input type="number" id="attendanceInput" class="form-input" placeholder="%"></div></div>
-                        <button id="saveGradeBtn" class="auth-submit-btn">Save Grade & Attendance</button>
-                    </div>
-                </section>
+                <div id="studentRecordsView" class="info-card-white"><h3>📊 My Academic Records</h3><div id="studentGradesDisplay" class="records-container"></div><div id="studentAttendanceDisplay"></div></div>
+                <div id="adminRecordsView" class="info-card-white" style="display: none;"><h3>Admin - Manage Grades</h3><div class="app-form-group"><label>Student</label><select id="adminStudentSelect" class="dark-select"></select></div><div class="app-form-group"><label>Subject</label><select id="gradeSubjectSelect" class="dark-select"></select></div><div class="form-row"><div class="app-form-group"><label>Grade</label><input type="text" id="gradeInput" class="dark-input"></div><div class="app-form-group"><label>Attendance</label><select id="attendanceStatus" class="dark-select"><option>Present</option><option>Absent</option><option>Tardy</option></select></div></div><button id="saveGradeBtn" class="save-btn">Save</button></div>
             </div>
 
-            <!-- Updates Feature -->
+            <!-- Updates -->
             <div id="updates-content" class="content-panel">
-                <section class="info-section">
-                    <div class="updates-container">
-                        <div id="studentUpdatesView" class="info-card">
-                            <h3><i class="fas fa-bell"></i> Recent Announcements</h3>
-                            <div id="studentNotificationsList" class="notifications-list">
-                                <p>No new announcements.</p>
-                            </div>
+                <div id="studentUpdatesView" class="info-card-white"><h3>🔔 Announcements</h3><div id="studentNotificationsList" class="notifications-list"></div></div>
+                <div id="adminUpdatesView" class="info-card-white" style="display: none;"><h3>Admin - Manage Announcements</h3><div class="admin-update-tabs"><button class="admin-tab active" data-admin-tab="schedule">📅 Schedule</button><button class="admin-tab" data-admin-tab="room">🏠 Room</button><button class="admin-tab" data-admin-tab="professor">👨‍🏫 Professor</button><button class="admin-tab" data-admin-tab="requests">📥 Schedule Change Requests <span id="pendingRequestsBadge" class="pending-badge" style="display:none;">0</span></button><button class="admin-tab" data-admin-tab="programs">📚 Manage Programs</button></div>
+
+                <!-- NEW: Audience targeting block (shared by all 3 announcement panels) -->
+                <div id="adminAudienceBlock" class="admin-audience-block">
+                    <h4><i class="fas fa-bullseye"></i> Send Announcement To</h4>
+                    <p class="schedule-history-note">Pick the audience for this announcement. Students only see announcements addressed to them, their section, or "All".</p>
+                    <div class="form-row">
+                        <div class="app-form-group">
+                            <label>Audience Type</label>
+                            <select id="audienceType" class="dark-select">
+                                <option value="all">📢 All Students</option>
+                                <option value="section">🏷️ Specific Section</option>
+                                <option value="student">👤 Specific Student</option>
+                            </select>
                         </div>
-                        
-                        <div id="adminUpdatesView" class="info-card" style="display: none;">
-                            <h3><i class="fas fa-edit"></i> Admin - Manage Announcements</h3>
-                            <div class="admin-update-tabs">
-                                <button class="admin-tab active" data-admin-tab="schedule">📅 Schedule Changes</button>
-                                <button class="admin-tab" data-admin-tab="room">🏠 Room Switching</button>
-                                <button class="admin-tab" data-admin-tab="professor">👨‍🏫 Professor Changes</button>
-                            </div>
-                            
-                            <div id="scheduleChangePanel" class="admin-panel active-panel">
-                                <h4>Post Schedule Change</h4>
-                                <div class="form-group"><label>Subject</label><input type="text" id="scheduleSubject" class="form-input"></div>
-                                <div class="form-row"><div class="form-group"><label>Old Schedule</label><input type="text" id="oldSchedule" class="form-input"></div>
-                                <div class="form-group"><label>New Schedule</label><input type="text" id="newSchedule" class="form-input"></div></div>
-                                <div class="form-group"><label>Reason</label><textarea id="scheduleReason" class="form-input" rows="2"></textarea></div>
-                                <button id="postScheduleChangeBtn" class="admin-action-btn">Post Schedule Change</button>
-                            </div>
-                            
-                            <div id="roomChangePanel" class="admin-panel">
-                                <h4>Post Room Change</h4>
-                                <div class="form-group"><label>Subject</label><input type="text" id="roomSubject" class="form-input"></div>
-                                <div class="form-row"><div class="form-group"><label>Old Room</label><input type="text" id="oldRoom" class="form-input"></div>
-                                <div class="form-group"><label>New Room</label><input type="text" id="newRoom" class="form-input"></div></div>
-                                <div class="form-group"><label>Reason</label><textarea id="roomReason" class="form-input" rows="2"></textarea></div>
-                                <button id="postRoomChangeBtn" class="admin-action-btn">Post Room Change</button>
-                            </div>
-                            
-                            <div id="professorChangePanel" class="admin-panel">
-                                <h4>Post Professor Change</h4>
-                                <div class="form-group"><label>Subject</label><input type="text" id="profSubject" class="form-input"></div>
-                                <div class="form-row"><div class="form-group"><label>Old Professor</label><input type="text" id="oldProfessor" class="form-input"></div>
-                                <div class="form-group"><label>New Professor</label><input type="text" id="newProfessor" class="form-input"></div></div>
-                                <div class="form-group"><label>Reason</label><textarea id="profReason" class="form-input" rows="2"></textarea></div>
-                                <button id="postProfessorChangeBtn" class="admin-action-btn">Post Professor Change</button>
-                            </div>
+                        <div class="app-form-group" id="audienceSectionWrap" style="display:none;">
+                            <label>Section</label>
+                            <select id="audienceSectionSelect" class="dark-select"><option value="">Select section</option></select>
+                        </div>
+                        <div class="app-form-group" id="audienceStudentWrap" style="display:none;">
+                            <label>Student</label>
+                            <select id="audienceStudentSelect" class="dark-select"><option value="">Select student</option></select>
                         </div>
                     </div>
-                </section>
+                    <div id="audienceSummary" class="audience-summary"><i class="fas fa-info-circle"></i> Will be sent to <strong>all enrolled students</strong>.</div>
+                </div>
+
+                <div id="scheduleChangePanel" class="admin-panel active-panel"><h4>Post Schedule Change</h4><div class="app-form-group"><label>Subject</label><input type="text" id="scheduleSubject" class="dark-input"></div><div class="form-row"><div class="app-form-group"><label>Old Schedule</label><input type="text" id="oldSchedule" class="dark-input"></div><div class="app-form-group"><label>New Schedule</label><input type="text" id="newSchedule" class="dark-input"></div></div><div class="app-form-group"><label>Reason</label><textarea id="scheduleReason" class="dark-input" rows="2"></textarea></div><button id="postScheduleChangeBtn" class="action-btn">Post</button></div>
+                <div id="roomChangePanel" class="admin-panel"><h4>Post Room Change</h4><div class="app-form-group"><label>Subject</label><input type="text" id="roomSubject" class="dark-input"></div><div class="form-row"><div class="app-form-group"><label>Old Room</label><input type="text" id="oldRoom" class="dark-input"></div><div class="app-form-group"><label>New Room</label><input type="text" id="newRoom" class="dark-input"></div></div><div class="app-form-group"><label>Reason</label><textarea id="roomReason" class="dark-input" rows="2"></textarea></div><button id="postRoomChangeBtn" class="action-btn">Post</button></div>
+                <div id="professorChangePanel" class="admin-panel"><h4>Post Professor Change</h4><div class="app-form-group"><label>Subject</label><input type="text" id="profSubject" class="dark-input"></div><div class="form-row"><div class="app-form-group"><label>Old Professor</label><input type="text" id="oldProfessor" class="dark-input"></div><div class="app-form-group"><label>New Professor</label><input type="text" id="newProfessor" class="dark-input"></div></div><div class="app-form-group"><label>Reason</label><textarea id="profReason" class="dark-input" rows="2"></textarea></div><button id="postProfessorChangeBtn" class="action-btn">Post</button></div>
+                <div id="requestsPanel" class="admin-panel"><h4><i class="fas fa-inbox"></i> Pending Schedule Change Requests</h4><p class="schedule-history-note">Approve a request to replace the student's default schedule with their modified one. Reject to discard the modification.</p><div id="requestsList" class="requests-list"><div class="empty-state"><i class="fas fa-inbox"></i><p>No pending schedule change requests.</p></div></div></div>
+                <div id="programsPanel" class="admin-panel">
+                    <h4><i class="fas fa-graduation-cap"></i> Add a College Program / Course</h4>
+                    <p class="schedule-history-note">Add a new bachelor program (or extra subjects to an existing program) and the subjects offered for a chosen year level. Saved programs appear in the Self-Enrollment dropdown immediately.</p>
+                    <div class="form-row">
+                        <div class="app-form-group"><label>Program Name</label><input type="text" id="newProgramName" class="dark-input" placeholder="e.g. Bachelor of Science in Civil Engineering"></div>
+                        <div class="app-form-group"><label>Year Level</label><select id="newProgramYear" class="dark-select"><option>1st Year</option><option>2nd Year</option><option>3rd Year</option><option>4th Year</option></select></div>
+                    </div>
+                    <div class="program-subjects-block">
+                        <div class="program-subjects-header"><strong>Subjects for this year</strong><small>You can add as many as you like — 14 is recommended for a full year.</small></div>
+                        <div id="newProgramSubjectList" class="program-subject-list"></div>
+                        <button type="button" id="addProgramSubjectBtn" class="add-row-btn"><i class="fas fa-plus"></i> Add Subject</button>
+                    </div>
+                    <div class="program-form-actions">
+                        <button type="button" id="clearProgramFormBtn" class="modify-btn"><i class="fas fa-rotate-left"></i> Clear Form</button>
+                        <button type="button" id="saveProgramBtn" class="confirm-btn"><i class="fas fa-floppy-disk"></i> Save Program</button>
+                    </div>
+                    <div class="custom-programs-section">
+                        <h4><i class="fas fa-book"></i> Programs You've Added</h4>
+                        <div id="customProgramsList" class="custom-programs-list"><div class="empty-state"><i class="fas fa-book"></i><p>No custom programs yet.</p></div></div>
+                    </div>
+                </div>
+            </div>
             </div>
 
-            <!-- AI Schedule Generator -->
+            <!-- Schedule Generator - FIXED VERSION -->
             <div id="sched-gen-1-content" class="content-panel">
-                <section class="info-section">
-                    <div class="info-card">
-                        <div class="schedule-ai-header">
-                            <h3><i class="fas fa-brain"></i> AI-Powered Schedule Generator</h3>
-                            <p>Based on your enrolled subjects and attendance records</p>
-                        </div>
-                        
-                        <div id="enrolledSubjectsPreview" class="enrolled-preview">
-                            <h4>Your Enrolled Subjects</h4>
-                            <div id="enrolledSubjectsListPreview" class="enrolled-preview-list"></div>
-                        </div>
-                        
-                        <div class="ai-insights" id="aiInsights"></div>
-                        
-                        <div class="schedule-controls">
-                            <div class="form-group">
-                                <label><i class="fas fa-clock"></i> Preferred Time Slot</label>
-                                <select id="preferredTime" class="form-select">
+                <div class="info-card-white">
+                    <div class="schedule-ai-header">
+                        <h3><i class="fas fa-calendar-alt"></i> 📅 Schedule Generator</h3>
+                        <p>Customize your weekly schedule based on enrolled subjects</p>
+                    </div>
+
+                    <div id="enrolledSubjectsPreview" class="enrolled-preview">
+                        <h4><i class="fas fa-book"></i> Your Enrolled Subjects</h4>
+                        <div id="enrolledSubjectsListPreview" class="enrolled-preview-list"></div>
+                    </div>
+
+                    <div class="schedule-controls">
+                        <div class="form-row">
+                            <div class="app-form-group">
+                                <label><i class="fas fa-clock"></i> Preferred Time</label>
+                                <select id="preferredTime" class="dark-select">
                                     <option value="any">Any Time</option>
                                     <option value="morning">Morning (8 AM - 12 PM)</option>
                                     <option value="afternoon">Afternoon (1 PM - 5 PM)</option>
-                                    <option value="evening">Evening (5 PM - 8 PM)</option>
                                 </select>
                             </div>
-                            <div class="form-group">
+                            <div class="app-form-group">
                                 <label><i class="fas fa-calendar-week"></i> Preferred Days</label>
-                                <select id="preferredDays" class="form-select">
+                                <select id="preferredDays" class="dark-select">
                                     <option value="all">All Days</option>
-                                    <option value="mon-wed-fri">Monday, Wednesday, Friday</option>
-                                    <option value="tue-thu">Tuesday, Thursday</option>
-                                    <option value="custom">Custom Selection</option>
+                                    <option value="mon-wed-fri">Mon, Wed, Fri</option>
+                                    <option value="tue-thu">Tue, Thu</option>
                                 </select>
                             </div>
-                            <div id="customDaysContainer" style="display: none;">
-                                <label>Select Days:</label>
-                                <div class="checkbox-group">
-                                    <label><input type="checkbox" value="Monday"> Monday</label>
-                                    <label><input type="checkbox" value="Tuesday"> Tuesday</label>
-                                    <label><input type="checkbox" value="Wednesday"> Wednesday</label>
-                                    <label><input type="checkbox" value="Thursday"> Thursday</label>
-                                    <label><input type="checkbox" value="Friday"> Friday</label>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label><i class="fas fa-chart-line"></i> Subjects to Avoid (Optional)</label>
-                                <select id="subjectsToAvoid" class="form-select">
-                                    <option value="">None</option>
-                                </select>
-                            </div>
-                            <button id="generateAIScheduleBtn" class="generate-btn"><i class="fas fa-magic"></i> Generate AI Schedule</button>
                         </div>
-                        
-                        <div id="scheduleResult" class="schedule-result"></div>
+                        <button id="generateCustomScheduleBtn" class="generate-btn">
+                            <i class="fas fa-magic"></i> Generate My Schedule
+                        </button>
                     </div>
-                </section>
+
+                    <div id="scheduleResult" class="schedule-result">
+                        <div class="empty-schedule-message">
+                            <i class="fas fa-calendar-plus"></i>
+                            <p>No schedule generated yet.</p>
+                            <p>Click "Generate My Schedule" to view your weekly class schedule.</p>
+                        </div>
+                    </div>
+
+                    <div id="scheduleSlotIndicator" class="slot-indicator" style="display:none;">
+                        <i class="fas fa-bolt"></i>
+                        <span>Schedule Change Slots Remaining: <strong id="slotsRemainingDisplay">50</strong> / <span id="slotsLimitDisplay">50</span></span>
+                        <small id="slotsHint">Each modification request you submit uses one slot. Slots reset only via Developer Mode.</small>
+                    </div>
+
+                    <div id="subjectScheduleEditor" class="subject-editor-section" style="display:none;">
+                        <h4><i class="fas fa-pen-to-square"></i> Edit Per-Subject Time Slots</h4>
+                        <p class="subject-editor-note">Multi-day subjects are <strong>conjoined</strong>: changing the day or time of one session moves all sessions of that subject together so the schedule stays internally consistent. Submit your modified schedule for admin approval when ready.</p>
+                        <div id="subjectEditorList" class="subject-editor-list"></div>
+                        <div class="subject-editor-actions">
+                            <button id="resetScheduleBtn" class="modify-btn"><i class="fas fa-rotate-left"></i> Reset to Default</button>
+                            <button id="submitScheduleChangeBtn" class="confirm-btn"><i class="fas fa-paper-plane"></i> Submit Modified Schedule for Approval</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
 
-    <!-- Custom Console Overlay -->
-    <div class="console-overlay" id="consoleOverlay">
-        <div class="console-popup">
-            <div class="console-header">
-                <span><i class="fas fa-terminal"></i> System Console</span>
-                <button class="console-close" onclick="closeConsole()">×</button>
+    <!-- Modals -->
+    <div id="scheduleModifyModal" class="modal-overlay" style="display: none;"><div class="modal-content"><div class="modal-header"><h3>✏️ Modify Schedule</h3><button class="modal-close" onclick="window.closeModifyModal()">×</button></div><div class="modal-body"><p>You chose to modify your schedule instead of confirming the auto-assigned one.</p><p>Your default schedule has been saved and will remain visible on your dashboard. To change time slots, open the Schedule Generator and edit each subject. Submitted changes go to the admin for approval.</p><button id="goToSchedGenBtn" class="modal-btn">Go to Schedule Generator</button><button onclick="window.closeModifyModal()" class="modal-btn secondary">Cancel</button></div></div></div>
+
+    <!-- NEW: Confirm-with-deferral modal -->
+    <div id="confirmEnrollmentModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>✅ Confirm Enrollment</h3>
+                <button class="modal-close" onclick="window.closeConfirmEnrollmentModal()">×</button>
             </div>
-            <div class="console-content" id="consoleContent">
-                <div class="console-log"><span class="console-timestamp">[System]</span> <span class="console-info">Console ready.</span></div>
-            </div>
-            <div class="console-footer">
-                <button class="console-clear" onclick="clearConsole()">Clear</button>
-                <button class="console-minimize" onclick="closeConsole()">Close</button>
+            <div class="modal-body" id="confirmEnrollmentBody">
+                <!-- Filled in by patches.js -->
             </div>
         </div>
     </div>
 
-    <!-- Credits Modal -->
-    <div class="credits-overlay" id="creditsOverlay">
-        <div class="credits-popup">
-            <div class="credits-header">
-                <span><i class="fas fa-copyright"></i> Credits</span>
-                <button class="credits-close" onclick="closeCredits()">×</button>
+    <!-- SMS OTP Simulation Modal -->
+    <div id="otpSentModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header"><h3><i class="fas fa-sms"></i> SMS Verification Code Sent</h3><button class="modal-close" onclick="window.closeOtpModal()">×</button></div>
+            <div class="modal-body">
+                <p style="margin-bottom:8px;">A 6-digit verification code was just sent to:</p>
+                <p style="font-weight:600;font-size:1.05em;margin-bottom:14px;" id="otpModalPhone">+63 ___ ___ ____</p>
+                <div class="otp-display-box">
+                    <small>SMS Preview (this would arrive on your phone):</small>
+                    <div class="otp-code-display" id="otpModalCode">------</div>
+                    <small>Code expires in <span id="otpExpiryCountdown">5:00</span></small>
+                </div>
+                <p style="font-size:0.85em;color:#888;margin-top:14px;">SMS gateway is simulated for this demo build. In production, the code would be delivered by Twilio/Globe Labs and not displayed here.</p>
+                <button onclick="window.closeOtpModal()" class="modal-btn">Got It — Enter Code</button>
             </div>
-            <div class="credits-content">
-                <div class="credit-section"><i class="fas fa-microchip"></i><h3>Algorithmic Agenda Apparatus System</h3><p>Version 3.0</p></div>
-                <div class="credit-section"><i class="fas fa-users"></i><h3>Development Team</h3><p>Ang, Antonio Miguel<br>Calaud, Zyan Kurt<br>Decalay, James Renz<br>Diaz, Mariane Cathleen<br>Hayahay, Earl John<br>Lapidario, Ken Shin Ryu<br>Llarinas, Leon Othello<br>Manapat, Gabriel</p></div>
-                <div class="credit-section"><i class="fas fa-lightbulb"></i><h3>Project Dedication</h3><p>The Entrepreneurial Mind Project</p></div>
-                <div class="credit-section"><i class="fas fa-building"></i><h3>Novulution Tech.</h3><p>Innovating Education Through Technology</p></div>
-            </div>
-            <div class="credits-footer"><button onclick="closeCredits()" class="credits-ok-btn">Close</button></div>
         </div>
     </div>
 
-    <button class="console-toggle-btn" id="consoleToggleBtn" onclick="showConsole()">
-        <i class="fas fa-terminal"></i> Console
-    </button>
+    <div class="credits-overlay" id="creditsOverlay"><div class="credits-popup"><div class="credits-header"><span><i class="fas fa-copyright"></i> Credits</span><button class="credits-close" onclick="window.closeCredits()">×</button></div><div class="credits-content"><div class="credit-section"><i class="fas fa-microchip"></i><h3>Algorithmic Agenda Apparatus System</h3><p>Version 3.0</p></div><div class="credit-section"><i class="fas fa-users"></i><h3>Development Team</h3><p>Ang, Antonio Miguel | Calaud, Zyan Kurt<br>Decalay, James Renz | Diaz, Mariane Cathleen<br>Hayahay, Earl John | Lapidario, Ken Shin Ryu<br>Llarinas, Leon Othello | Manapat, Gabriel</p></div><div class="credit-section"><i class="fas fa-lightbulb"></i><h3>Project Dedication</h3><p>The Entrepreneurial Mind Project</p></div><div class="credit-section"><i class="fas fa-building"></i><h3>Novulution Tech.</h3><p>Innovating Education Through Technology</p></div></div><div class="credits-footer"><button onclick="window.closeCredits()" class="credits-ok-btn">Close</button></div></div></div>
 
-    <script src="script.js"></script>
+    <!-- Developer Dashboard -->
+    <div id="developerDashboard" class="developer-dashboard-full" style="display: none;">
+        <div class="dev-full-header">
+            <div class="dev-full-brand">
+                <i class="fas fa-microchip"></i>
+                <div>
+                    <h1>Developer Command Center</h1>
+                    <small>Algorithmic Agenda Apparatus - Enterprise Console</small>
+                </div>
+            </div>
+            <button id="devExitBtn" class="dev-exit-btn"><i class="fas fa-sign-out-alt"></i> Exit Developer Mode</button>
+        </div>
+
+        <div class="dev-full-stats">
+            <div class="dev-stat-card"><i class="fas fa-users"></i><div class="dev-stat-info"><span class="dev-stat-value" id="devTotalStudents">0</span><span class="dev-stat-label">Total Students</span></div></div>
+            <div class="dev-stat-card"><i class="fas fa-user-shield"></i><div class="dev-stat-info"><span class="dev-stat-value" id="devTotalAdmins">0</span><span class="dev-stat-label">Total Admins</span></div></div>
+            <div class="dev-stat-card"><i class="fas fa-book-open"></i><div class="dev-stat-info"><span class="dev-stat-value" id="devTotalEnrollments">0</span><span class="dev-stat-label">Total Enrollments</span></div></div>
+            <div class="dev-stat-card"><i class="fas fa-database"></i><div class="dev-stat-info"><span class="dev-stat-value" id="devStorageSize">0 KB</span><span class="dev-stat-label">Storage Used</span></div></div>
+        </div>
+
+        <div class="dev-full-main">
+            <div class="dev-console-section">
+                <div class="section-header"><i class="fas fa-terminal"></i><h3>Developer Terminal</h3><span class="section-badge">ADMIN ACCESS</span></div>
+                <div class="dev-terminal-output" id="devTerminalOutput"><div class="terminal-line">> System ready. Type 'help' for available commands.</div></div>
+                <div class="dev-terminal-input">
+                    <span class="terminal-prompt">$></span>
+                    <input type="text" id="devTerminalCommand" placeholder="Enter command...">
+                    <button id="devTerminalExecute"><i class="fas fa-play"></i> Execute</button>
+                </div>
+                <div class="terminal-commands">
+                    <button class="term-cmd" data-cmd="help">help</button>
+                    <button class="term-cmd" data-cmd="stats">stats</button>
+                    <button class="term-cmd" data-cmd="clear">clear</button>
+                    <button class="term-cmd" data-cmd="refresh">refresh</button>
+                    <button class="term-cmd" data-cmd="export">export</button>
+                </div>
+            </div>
+            <div class="dev-chart-section">
+                <div class="section-header"><i class="fas fa-chart-line"></i><h3>Student Analytics</h3><span class="section-badge">REAL-TIME</span></div>
+                <canvas id="devStudentChart" width="400" height="200"></canvas>
+                <div class="chart-legend"><span><i class="fas fa-user-graduate"></i> Student Growth Trend</span></div>
+            </div>
+        </div>
+
+        <div class="dev-full-table">
+            <div class="section-header">
+                <i class="fas fa-table"></i>
+                <h3>Student Records Management</h3>
+                <button id="devRefreshTableBtn" class="refresh-table-btn"><i class="fas fa-sync-alt"></i> Refresh</button>
+            </div>
+            <div class="dev-table-container" id="devStudentTable"></div>
+        </div>
+    </div>
+
+    <!-- Console Components -->
+    <div class="custom-console" id="customConsole">
+        <div class="custom-console-header">
+            <span><i class="fas fa-terminal"></i> System Console</span>
+            <div class="custom-console-controls">
+                <button id="clearConsoleBtn"><i class="fas fa-eraser"></i> Clear</button>
+                <button id="closeConsoleBtn"><i class="fas fa-times"></i> Close</button>
+            </div>
+        </div>
+        <div class="custom-console-content" id="customConsoleContent">
+            <div class="console-line">[System] Console ready.</div>
+        </div>
+        <div class="custom-console-input">
+            <span class="console-prompt">$></span>
+            <input type="text" id="consoleCommandInput" placeholder="Type a command...">
+            <button id="consoleExecuteBtn"><i class="fas fa-play"></i></button>
+        </div>
+    </div>
+
+    <button id="toggleConsoleBtn" class="console-toggle-btn-custom"><i class="fas fa-terminal"></i> Console</button>
+    <div id="customDevPrompt" class="custom-dev-prompt" style="display: none;">
+        <div class="custom-dev-prompt-content">
+            <h3><i class="fas fa-key"></i> Developer Access</h3>
+            <p>Enter Developer Access Code</p>
+            <input type="password" id="devCodeInput" class="dev-code-input" placeholder="Enter code...">
+            <div class="dev-prompt-buttons">
+                <button id="devCodeSubmit" class="dev-code-submit">Verify</button>
+                <button id="devCodeCancel" class="dev-code-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="./script.js"></script>
+    <script src="./patches.js"></script>
 </body>
 </html>
