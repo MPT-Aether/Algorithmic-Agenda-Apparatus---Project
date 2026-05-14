@@ -1,0 +1,204 @@
+/* ============================================
+   SIDEBAR COMPONENT STYLES
+   FIXED SIZE - NO SCROLLING
+   ============================================ */
+
+.sidebar {
+    width: 280px;
+    min-width: 280px;
+    background: rgba(10, 31, 51, 0.92);
+    backdrop-filter: blur(8px);
+    padding: 2rem 1.2rem;
+    border-radius: 48px 32px 32px 48px;
+    margin: 16px 0 16px 16px;
+    box-shadow: 8px 12px 28px rgba(0, 0, 0, 0.15);
+    border-top-right-radius: 64px;
+    border-bottom-left-radius: 64px;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    height: calc(100% - 32px);
+    /* NO overflow - everything should be visible */
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+}
+
+.sidebar-header i {
+    font-size: 2rem;
+    color: #FFC107;
+}
+
+.sidebar-brand {
+    display: flex;
+    flex-direction: column;
+}
+
+.system-name {
+    font-size: 1rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, #FFD966, #FFB347);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    line-height: 1.2;
+    margin-bottom: 2px;
+}
+
+.company-name {
+    font-size: 0.6rem;
+    color: rgba(255, 193, 7, 0.7);
+    letter-spacing: 0.5px;
+}
+
+.sidebar nav {
+    flex: 1;
+}
+
+.sidebar nav ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+
+.sidebar nav ul li a {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1rem;
+    color: #eef2ff;
+    padding: 14px 20px;
+    border-radius: 60px;
+    background: rgba(255, 255, 255, 0.05);
+    transition: all 0.25s;
+}
+
+.sidebar nav ul li a i {
+    width: 28px;
+    font-size: 1.2rem;
+    color: #FFC107;
+}
+
+.sidebar nav ul li a:hover {
+    background: rgba(255, 193, 7, 0.2);
+    transform: translateX(5px);
+}
+
+.sidebar nav ul li a.active {
+    background: rgba(255, 193, 7, 0.25);
+    border-left: 3px solid #FFC107;
+}
+
+.user-info-sidebar {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.user-avatar i {
+    font-size: 2.5rem;
+    color: #FFC107;
+}
+
+.user-details-sidebar {
+    text-align: center;
+}
+
+.user-details-sidebar span {
+    color: white;
+    font-weight: 600;
+    display: block;
+}
+
+.user-details-sidebar small {
+    color: #FFC107;
+    font-size: 0.7rem;
+}
+
+.logout-btn-sidebar {
+    background: rgba(239, 68, 68, 0.8);
+    border: none;
+    padding: 8px 16px;
+    border-radius: 40px;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: 0.2s;
+    width: 100%;
+}
+
+.logout-btn-sidebar:hover {
+    background: #ef4444;
+    transform: translateY(-2px);
+}
+
+.sidebar-footer {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.credits-btn {
+    width: 100%;
+    background: rgba(255, 193, 7, 0.15);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    padding: 10px 15px;
+    border-radius: 40px;
+    color: #FFC107;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+    font-size: 0.85rem;
+    margin-bottom: 10px;
+}
+
+.credits-btn:hover {
+    background: rgba(255, 193, 7, 0.3);
+    transform: translateY(-2px);
+}
+
+.copyright-footer {
+    font-size: 0.6rem;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* Remove any sidebar scrollbar styles - NO SCROLLING */
+.sidebar::-webkit-scrollbar {
+    display: none;
+}
+
+@media (max-width: 860px) {
+    .sidebar {
+        width: 100%;
+        min-width: 100%;
+        margin: 12px;
+        height: auto;
+    }
+    .sidebar nav ul {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+}
