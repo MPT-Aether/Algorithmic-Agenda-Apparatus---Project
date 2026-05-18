@@ -1,0 +1,158 @@
+/* ============================================
+   ALGORITHMIC AGENDA APPARATUS
+   Main Global Styles & Base Configuration
+   ============================================ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: linear-gradient(145deg, #457B9D 20%, #A8DADC 100%);
+    font-family: 'Inter', 'Poppins', sans-serif;
+    padding: 0;
+    margin: 0;
+    color: #1e2a3e;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+.app-container {
+    max-width: 1400px;
+    margin: 20px auto;
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(2px);
+    border-radius: 56px;
+    box-shadow: 0 25px 45px -12px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+    display: flex;
+    height: auto;
+    min-height: calc(100vh - 40px);
+}
+
+.main-content {
+    flex: 1;
+    padding: 2rem 2.5rem;
+    overflow-y: auto;
+    overflow-x: auto;
+    height: calc(100vh - 40px);
+}
+
+/* Utility Classes */
+.flex-between {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.flex-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.gap-sm { gap: 0.5rem; }
+.gap-md { gap: 1rem; }
+.gap-lg { gap: 1.5rem; }
+
+/* Scrollbar Styles */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #FFB347, #FF8C00);
+    border-radius: 10px;
+    transition: all 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #ff9f00, #e67e00);
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Firefox scrollbar */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #FFB347 rgba(255, 179, 71, 0.2);
+}
+
+/* Form Elements */
+.app-form-group {
+    margin-bottom: 1.2rem;
+}
+
+.app-form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #1e2a3e;
+}
+
+.dark-input, .dark-select, textarea.dark-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #cbd5e1;
+    border-radius: 16px;
+    font-size: 0.95rem;
+    background: white;
+    color: #1e2a3e;
+}
+
+.dark-input:focus, .dark-select:focus, textarea.dark-input:focus {
+    outline: none;
+    border-color: #FFB347;
+    box-shadow: 0 0 0 3px rgba(255, 180, 71, 0.2);
+}
+
+.form-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.form-row .app-form-group {
+    flex: 1;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive */
+@media (max-width: 860px) {
+    .app-container {
+        margin: 15px;
+        border-radius: 32px;
+        height: calc(100vh - 30px);
+    }
+}
+
+/* Left align Schedule Generator header text */
+.schedule-ai-header {
+    text-align: left !important;
+}
+
+.schedule-ai-header h3 {
+    text-align: left;
+    margin-bottom: 8px;
+}
+
+.schedule-ai-header p {
+    text-align: left;
+    margin-bottom: 0;
+}
+

@@ -1,0 +1,203 @@
+/* ============================================
+   LOGIN PAGE COMPONENT STYLES
+   ============================================ */
+
+.login-page {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(145deg, #457B9D 20%, #A8DADC 100%);
+    z-index: 1000;
+    overflow-y: auto;
+    padding: 2rem 1rem;
+}
+
+.login-wrapper {
+    background: rgba(10, 31, 51, 0.92);
+    backdrop-filter: blur(8px);
+    border-radius: 56px;
+    padding: 2rem;
+    box-shadow: 0 25px 45px -12px rgba(0, 0, 0, 0.25);
+    width: 100%;
+    max-width: 500px;
+    border: 1px solid rgba(255, 193, 7, 0.2);
+}
+
+.login-brand { text-align: center; margin-bottom: 2rem; }
+.login-brand i { font-size: 3rem; color: #FFC107; }
+.login-brand-text h1 {
+    font-size: 1.5rem;
+    background: linear-gradient(135deg, #FFD966, #FFB347);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+.login-brand-text small { color: #FFC107; opacity: 0.8; }
+
+.login-tabs {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+}
+
+.login-tab-btn {
+    flex: 1;
+    padding: 12px;
+    background: none;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    color: #eef2ff;
+    transition: all 0.2s;
+}
+
+.login-tab-btn.active { color: #FFC107; border-bottom: 3px solid #FFC107; }
+
+.dev-mode-trigger {
+    position: absolute;
+    right: -10px;
+    top: -15px;
+    cursor: pointer;
+    font-size: 1rem;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+    color: #FFC107;
+}
+
+.dev-mode-trigger:hover { opacity: 1; }
+
+.login-form-panel { transition: all 0.3s; }
+.login-form-panel h3 { text-align: center; margin-bottom: 1.5rem; color: white; }
+
+.login-form-group { margin-bottom: 1.2rem; }
+.login-form-group label { display: block; font-weight: 600; margin-bottom: 8px; color: white; }
+
+.login-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 16px;
+    font-size: 0.95rem;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.login-input:focus {
+    outline: none;
+    border-color: #FFB347;
+    box-shadow: 0 0 0 3px rgba(255, 180, 71, 0.2);
+}
+
+.login-input::placeholder { color: rgba(255, 255, 255, 0.5); }
+
+.password-group { position: relative; }
+
+.toggle-password {
+    position: absolute;
+    right: 12px;
+    top: 38px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    color: #FFC107;
+}
+
+.checkbox-group { margin: 1rem 0; }
+.checkbox-group label { color: #eef2ff; cursor: pointer; }
+
+.login-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #FFB347, #FF8C00);
+    border: none;
+    padding: 12px;
+    border-radius: 40px;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    margin-top: 1rem;
+    transition: 0.2s;
+}
+
+.login-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(255, 140, 0, 0.3); }
+
+.signup-prompt { text-align: center; margin-top: 1rem; font-size: 0.85rem; color: #eef2ff; }
+.signup-prompt a { color: #FFC107; text-decoration: none; }
+.forgot-link { font-size: 0.8rem; color: #FFC107; text-decoration: none; }
+
+.password-requirements {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1rem;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.password-requirements small { color: #eef2ff; display: block; margin-bottom: 0.5rem; }
+.password-requirements ul { list-style: none; padding: 0; }
+.password-requirements li { font-size: 0.85rem; color: #ff6b6b; margin-bottom: 0.3rem; }
+
+.otp-send-row { display: flex; gap: 0.5rem; }
+.otp-send-btn { flex: 0 0 auto; width: auto; margin-top: 0 !important; padding: 12px 20px; }
+
+/* Make login page scrollable with hidden scrollbar */
+.login-page {
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+}
+
+.login-page::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+/* Ensure the login wrapper can grow with content */
+.login-wrapper {
+    max-height: none;
+    overflow-y: visible;
+}
+
+/* Make the container responsive and scrollable when content overflows */
+.login-container-new {
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.login-container-new::-webkit-scrollbar {
+    display: none;
+}
+
+/* For the signup panels specifically, ensure they scroll */
+.login-form-panel {
+    max-height: calc(100vh - 250px);
+    overflow-y: auto;
+    padding-right: 10px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.login-form-panel::-webkit-scrollbar {
+    display: none;
+}
+
+/* Ensure password requirements don't cause overflow issues */
+.password-requirements {
+    max-height: 150px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.password-requirements::-webkit-scrollbar {
+    display: none;
+}
